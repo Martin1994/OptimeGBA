@@ -6,6 +6,8 @@ using static OptimeGBA.MemoryUtil;
 using System.IO;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using System.Linq;
+
 namespace OptimeGBA
 {
     public sealed unsafe class PpuRenderer
@@ -61,11 +63,8 @@ namespace OptimeGBA
 
             // Load 3D placeholder
             // Why do I waste time on useless crap like this
-            Stream img = typeof(PpuRenderer).Assembly.GetManifestResourceStream("OptimeGBA-OpenTK.resources.3d-placeholder.raw");
-            if (img == null)
-            {
-                img = typeof(PpuRenderer).Assembly.GetManifestResourceStream("OptimeGBA-SDL.resources.3d-placeholder.raw");
-            }
+            string[] resources = typeof(PpuRenderer).Assembly.GetManifestResourceNames();
+            Stream img = typeof(PpuRenderer).Assembly.GetManifestResourceStream(resources.First(name => name.EndsWith(".resources.3d-placeholder.raw")));
             PlaceholderFor3D = new ushort[img.Length / 2];
             int val = 0;
             int index = 0;

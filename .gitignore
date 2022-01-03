@@ -6,6 +6,7 @@ imgui.ini
 *.txt
 tests/
 .vs
+.vscode
 Properties
 *.bin
 samples
