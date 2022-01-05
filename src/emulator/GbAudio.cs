@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
 using System.IO;
-using static SDL2.SDL;
 using OptimeGBA;
 using static OptimeGBA.Bits;
 namespace OptimeGBA

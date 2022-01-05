@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
     <TargetFramework>netcoreapp6</TargetFramework>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
@@ -9,7 +9,6 @@
     <OldToolsVersion>Current</OldToolsVersion>
     <TieredCompilation>true</TieredCompilation>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <StartupObject>OptimeGBAEmulator.MainSDL</StartupObject>
 
     <ApplicationIcon>icon.ico</ApplicationIcon>
 
@@ -20,26 +19,14 @@
     <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
     <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
 
-    <DefineConstants>UNSAFE</DefineConstants>
+    <!-- <DefineConstants>UNSAFE</DefineConstants> -->
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="DiscordRichPresence" Version="1.0.169" />
-    <PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-*" />
-    <PackageReference Include="ppy.SDL2-CS" Version="1.0.53" />
-    <PackageReference Include="SDL2-CS.NetCore" Version="2.0.8" />
-
-    <PackageReference Include="Imgui.net" Version="1.75.0" />
-    <PackageReference Include="Gee.External.Capstone" Version="2.0.2" />
-    <PackageReference Include="OpenGL.Net" Version="0.8.4" />
-    <PackageReference Include="OpenTK" Version="4.6.3" />
-
     <Compile Remove="src/gui/**" />
     <Compile Remove="src/MainOpenTK.cs" />
+    <Compile Remove="src/MainSDL.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="resources/3d-placeholder.raw" />
-
-    <EmbeddedResource Include="resources/animation/*.raw" />
-    <EmbeddedResource Include="resources/no-intro.dat" />
   </ItemGroup>
 </Project>

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp5</TargetFramework>
+    <TargetFramework>netcoreapp6</TargetFramework>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
     <UpgradeBackupLocation>
@@ -16,9 +16,9 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="icon.ico"> 
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory> 
-    </Content> 
+    <Content Include="icon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <PackageReference Include="Gee.External.Capstone" Version="2.0.2" />
     <PackageReference Include="Imgui.net" Version="1.78.0" />
     <PackageReference Include="Microsoft.DotNet.ILCompiler" Version="1.0.0-alpha-*" />
@@ -35,4 +35,4 @@
   <ItemGroup>
     <EmbeddedResource Include="resources/3d-placeholder.raw" />
   </ItemGroup>
-</Project> 
+</Project>
