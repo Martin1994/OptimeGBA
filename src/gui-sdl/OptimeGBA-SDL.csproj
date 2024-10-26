@@ -9,7 +9,7 @@
     <OldToolsVersion>Current</OldToolsVersion>
     <TieredCompilation>true</TieredCompilation>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <StartupObject>OptimeGBAEmulator.MainSDL</StartupObject>
+    <StartupObject>OptimeGBASdl.MainSDL</StartupObject>
 
     <ApplicationIcon>../../icon.ico</ApplicationIcon>
 
@@ -40,7 +40,7 @@
     <ProjectReference Include="../emulator/OptimeGBA-Core.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../../resources/animation/*.raw" />
-    <EmbeddedResource Include="../../resources/no-intro.dat" />
+    <EmbeddedResource Include="resources/animation/*.raw" />
+    <EmbeddedResource Include="resources/no-intro.dat" />
   </ItemGroup>
 </Project>

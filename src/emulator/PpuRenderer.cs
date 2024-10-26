@@ -62,8 +62,7 @@ namespace OptimeGBA
             }
 
             // Load 3D placeholder
-            string[] resources = typeof(PpuRenderer).Assembly.GetManifestResourceNames();
-            Stream img = typeof(PpuRenderer).Assembly.GetManifestResourceStream("OptimeGBA-Core.3d-placeholder.raw");
+            Stream img = typeof(PpuRenderer).Assembly.GetManifestResourceStream("OptimeGBA-Core.resources.3d-placeholder.raw");
             PlaceholderFor3D = new ushort[img.Length / 2];
             int val = 0;
             int index = 0;

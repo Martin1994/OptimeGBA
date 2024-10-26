@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using OptimeGBA;
 using DiscordRPC;
 
-namespace OptimeGBAEmulator
+namespace OptimeGBASdl
 {
     public sealed unsafe class MainSDL
     {
@@ -77,7 +77,7 @@ namespace OptimeGBAEmulator
         public static void Main(string[] args)
         {
             // Parse No-Intro database
-            var stream = typeof(MainSDL).Assembly.GetManifestResourceStream("OptimeGBA-SDL.no-intro.dat");
+            var stream = typeof(MainSDL).Assembly.GetManifestResourceStream("OptimeGBA-SDL.resources.no-intro.dat");
             var doc = new XmlDocument();
             doc.Load(stream);
             foreach (XmlNode node in doc.GetElementsByTagName("game"))

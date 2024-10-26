@@ -20,6 +20,6 @@
     <!-- <DefineConstants>UNSAFE</DefineConstants> -->
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../../resources/3d-placeholder.raw" />
+    <EmbeddedResource Include="resources/3d-placeholder.raw" />
   </ItemGroup>
 </Project>
