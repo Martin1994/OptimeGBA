@@ -9,7 +9,7 @@
     <OldToolsVersion>Current</OldToolsVersion>
     <TieredCompilation>true</TieredCompilation>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <StartupObject>OptimeGBASdl.MainSDL</StartupObject>
+    <StartupObject>OptimeGBASdl.MainSdl</StartupObject>
 
     <ApplicationIcon>../../icon.ico</ApplicationIcon>
 

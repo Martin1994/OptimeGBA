@@ -8,76 +8,25 @@ using System.Text;
 using System.Runtime.InteropServices;
 using OptimeGBA;
 using DiscordRPC;
+using System.Threading.Tasks;
+using SDL2;
+using System.Linq;
 
 namespace OptimeGBASdl
 {
-    public sealed unsafe class MainSDL
+    public static class MainSdl
     {
-        const uint AUDIO_SAMPLE_THRESHOLD = 1024;
-        const uint AUDIO_SAMPLE_FULL_THRESHOLD = 1024;
-        const int SAMPLES_PER_CALLBACK = 32;
 
-        const int CyclesPerFrameGba = 280896;
-        const double SecondsPerFrameGba = 1D / (16777216D / 280896D);
-        const int CyclesPerFrameNds = 560190;
-        const double SecondsPerFrameNds = 1D / (33513982D / 560190D);
-        const double SecondsPerFrameAnimation = 0.1D;
-
-        const int LogoWidth = 34;
-        const int LogoHeight = 21;
-        const int LogoBpp = 4;
-        const int LogoFrames = 8;
-
-        static SDL_AudioSpec want, have;
-        static uint AudioDevice;
-
-        static IntPtr Texture;
-
-        static double Fps;
-        static double Mips;
-
-        static IntPtr Window;
-        static IntPtr Renderer;
-
-        static Gba Gba;
-        static Nds Nds;
-
-        static bool NdsMode;
-
-        static Dictionary<string, string> GameNameDictionary = new Dictionary<string, string>();
-
-        static string RomName;
+        public static Dictionary<string, string> GameNameDictionary = new Dictionary<string, string>();
+#if DISCORD_RPC
         static DiscordRpcClient Client;
-        static Timestamps Timestamp;
         static Assets RpcAssets;
-
-        static bool Sync = true;
-
-        static long Seconds;
-
-        static bool IntegerScaling = false;
-        static bool IsFullscreen = false;
-        static bool Stretched = false;
-
-        const int GBA_WIDTH = 240;
-        const int GBA_HEIGHT = 160;
-
-        const int NDS_WIDTH = 256;
-        const int NDS_HEIGHT = 192;
-
-        static bool Excepted = false;
-        static string ExceptionMessage = "";
-
-        static Thread EmulationThread;
-        static AutoResetEvent ThreadSync = new AutoResetEvent(false);
-
-        static uint[] DisplayBuf = new uint[NDS_WIDTH * NDS_HEIGHT];
-        static bool ColorCorrection = true;
+#endif
 
         public static void Main(string[] args)
         {
             // Parse No-Intro database
-            var stream = typeof(MainSDL).Assembly.GetManifestResourceStream("OptimeGBA-SDL.resources.no-intro.dat");
+            var stream = typeof(MainSdl).Assembly.GetManifestResourceStream("OptimeGBA-SDL.resources.no-intro.dat");
             var doc = new XmlDocument();
             doc.Load(stream);
             foreach (XmlNode node in doc.GetElementsByTagName("game"))
@@ -109,11 +58,100 @@ namespace OptimeGBASdl
             });
 #endif
 
+            SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO);
+
+            var windows = Enumerable.Range(0, 2).Select(i => new WindowSdl()).ToArray();
+            var windowTasks = Task.WhenAll(windows.Select(w => Task.Run(() => w.Run(args))));
+            windowTasks.Wait();
+
+            SDL_AudioQuit();
+            SDL_VideoQuit();
+            SDL_Quit();
+#if DISCORD_RPC
+            Client.Dispose();
+#endif
+            Environment.Exit(0);
+        }
+
+    }
+
+    public unsafe class WindowSdl
+    {
+        const uint AUDIO_SAMPLE_THRESHOLD = 1024;
+        const uint AUDIO_SAMPLE_FULL_THRESHOLD = 1024;
+        const int SAMPLES_PER_CALLBACK = 32;
+
+        const int CyclesPerFrameGba = 280896;
+        const double SecondsPerFrameGba = 1D / (16777216D / 280896D);
+        const int CyclesPerFrameNds = 560190;
+        const double SecondsPerFrameNds = 1D / (33513982D / 560190D);
+        const double SecondsPerFrameAnimation = 0.1D;
+
+        const int LogoWidth = 34;
+        const int LogoHeight = 21;
+        const int LogoBpp = 4;
+        const int LogoFrames = 8;
+
+        static SDL_AudioSpec want, have;
+        static uint AudioDevice = InitAudioDevice();
+
+        IntPtr Texture;
+
+        double Fps;
+        double Mips;
+
+        IntPtr Window;
+        IntPtr Renderer;
+
+        public Gba Gba;
+        Nds Nds;
+
+        bool NdsMode;
+
+        string RomName;
+        Timestamps Timestamp;
+
+        bool Sync = true;
+
+        long Seconds;
+
+        bool IntegerScaling = false;
+        bool IsFullscreen = false;
+        bool Stretched = false;
+
+        const int GBA_WIDTH = 240;
+        const int GBA_HEIGHT = 160;
+
+        const int NDS_WIDTH = 256;
+        const int NDS_HEIGHT = 192;
+
+        bool Excepted = false;
+        string ExceptionMessage = "";
+
+        Thread EmulationThread;
+        AutoResetEvent ThreadSync = new AutoResetEvent(false);
+
+        uint[] DisplayBuf = new uint[NDS_WIDTH * NDS_HEIGHT];
+        bool ColorCorrection = true;
+
+        static uint InitAudioDevice()
+        {
+            want.channels = 2;
+            want.freq = 32768;
+            want.samples = SAMPLES_PER_CALLBACK;
+            want.format = AUDIO_S16LSB;
+            // want.callback = NeedMoreAudioCallback;
+            uint device = SDL_OpenAudioDevice(null, 0, ref want, out have, (int)SDL_AUDIO_ALLOW_FORMAT_CHANGE);
+            SDL_PauseAudioDevice(device, 0);
+
+            return device;
+        }
+
+        public void Run(string[] args)
+        {
             EmulationThread = new Thread(EmulationThreadHandler);
             EmulationThread.Name = "Emulation Core";
             EmulationThread.Start();
-
-            SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO);
 
             bool GuiMode = args.Length == 0;
 
@@ -124,14 +162,6 @@ namespace OptimeGBASdl
             SDL_SetWindowMinimumSize(Window, GBA_WIDTH, GBA_HEIGHT);
 
             // SDL_GL_SetSwapInterval()
-
-            want.channels = 2;
-            want.freq = 32768;
-            want.samples = SAMPLES_PER_CALLBACK;
-            want.format = AUDIO_S16LSB;
-            // want.callback = NeedMoreAudioCallback;
-            AudioDevice = SDL_OpenAudioDevice(null, 0, ref want, out have, (int)SDL_AUDIO_ALLOW_FORMAT_CHANGE);
-            SDL_PauseAudioDevice(AudioDevice, 0);
 
             string romPath;
             byte[] rom;
@@ -177,8 +207,7 @@ namespace OptimeGBASdl
                         switch (evt.type)
                         {
                             case SDL_EventType.SDL_QUIT:
-                                Cleanup();
-                                break;
+                                return;
 
                             case SDL_EventType.SDL_DROPFILE:
                                 filename = Marshal.PtrToStringUTF8(evt.drop.file);
@@ -232,7 +261,7 @@ namespace OptimeGBASdl
                 romPath = filename;
 
                 Marshal.FreeHGlobal(data);
-            }        
+            }
 
         reload:
 
@@ -366,6 +395,17 @@ namespace OptimeGBASdl
                 {
                     switch (evt.type)
                     {
+                        case SDL_EventType.SDL_WINDOWEVENT:
+                            switch (evt.window.windowEvent)
+                            {
+                                case SDL_WindowEventID.SDL_WINDOWEVENT_CLOSE:
+                                    if (evt.window.windowID == SDL_GetWindowID(Window))
+                                    {
+                                        quit = true;
+                                    }
+                                    break;
+                            }
+                            break;
                         case SDL_EventType.SDL_QUIT:
                             quit = true;
                             break;
@@ -616,13 +656,9 @@ namespace OptimeGBASdl
 
             SDL_DestroyRenderer(Renderer);
             SDL_DestroyWindow(Window);
-            SDL_AudioQuit();
-            SDL_VideoQuit();
-            SDL_Quit();
-            Cleanup();
         }
 
-        public static void CopyPixels(ushort[] src, uint[] dest, uint pixels, bool colorCorrection)
+        public void CopyPixels(ushort[] src, uint[] dest, uint pixels, bool colorCorrection)
         {
             var lut = colorCorrection ? PpuRenderer.ColorLutCorrected : PpuRenderer.ColorLut;
 
@@ -632,7 +668,7 @@ namespace OptimeGBASdl
             }
         }
 
-        public static void CopyPixels(ushort* src, uint[] dest, uint pixels, bool colorCorrection)
+        public void CopyPixels(ushort* src, uint[] dest, uint pixels, bool colorCorrection)
         {
             var lut = colorCorrection ? PpuRenderer.ColorLutCorrected : PpuRenderer.ColorLut;
 
@@ -642,7 +678,7 @@ namespace OptimeGBASdl
             }
         }
 
-        public static void UpdatePlayingRpc()
+        public void UpdatePlayingRpc()
         {
             var mm = ((Seconds / 60) % 60).ToString().PadLeft(2, '0');
             var ss = (Seconds % 60).ToString().PadLeft(2, '0');
@@ -667,20 +703,12 @@ namespace OptimeGBASdl
 #endif
         }
 
-        public static void Cleanup()
-        {
-#if DISCORD_RPC
-            Client.Dispose();
-#endif
-            Environment.Exit(0);
-        }
-
         public static double GetTime()
         {
             return (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
         }
 
-        public static void SdlMessage(string title, string msg)
+        public void SdlMessage(string title, string msg)
         {
             SDL_ShowSimpleMessageBox(SDL_MessageBoxFlags.SDL_MESSAGEBOX_INFORMATION, title, msg, Window);
         }
@@ -697,9 +725,9 @@ namespace OptimeGBASdl
             return buf;
         }
 
-        public static byte[] ReadResource(String res)
+        public static byte[] ReadResource(string res)
         {
-            Stream img = typeof(MainSDL).Assembly.GetManifestResourceStream(res);
+            Stream img = typeof(MainSdl).Assembly.GetManifestResourceStream(res);
             return ReadFully(img);
         }
 
@@ -717,14 +745,14 @@ namespace OptimeGBASdl
             }
         }
 
-        static bool LCtrl;
-        static bool LAlt;
-        static bool Tab;
-        static bool Space;
+        bool LCtrl;
+        bool LAlt;
+        bool Tab;
+        bool Space;
 
-        static bool ResetDue;
+        bool ResetDue;
 
-        public static void KeyEvent(SDL_KeyboardEvent kb)
+        public void KeyEvent(SDL_KeyboardEvent kb)
         {
             bool pressed = kb.state == SDL_PRESSED;
 
@@ -943,11 +971,11 @@ namespace OptimeGBASdl
 
         }
 
-        public static void UpdateRomName(string path)
+        public void UpdateRomName(string path)
         {
-            if (GameNameDictionary.ContainsKey(Gba.Provider.RomId))
+            if (MainSdl.GameNameDictionary.ContainsKey(Gba.Provider.RomId))
             {
-                RomName = GameNameDictionary[Gba.Provider.RomId];
+                RomName = MainSdl.GameNameDictionary[Gba.Provider.RomId];
             }
             else
             {
@@ -955,7 +983,7 @@ namespace OptimeGBASdl
             }
         }
 
-        public static void UpdateTitle()
+        public void UpdateTitle()
         {
             if (NdsMode)
             {
@@ -988,10 +1016,10 @@ namespace OptimeGBASdl
             }
         }
 
-        static int CyclesLeft;
-        static long CyclesRan;
+        int CyclesLeft;
+        long CyclesRan;
 
-        public static void EmulationThreadHandler()
+        public void EmulationThreadHandler()
         {
             try
             {
@@ -1014,7 +1042,7 @@ namespace OptimeGBASdl
             }
         }
 
-        public static void RunFrame()
+        public void RunFrame()
         {
             if (NdsMode)
             {
@@ -1036,7 +1064,7 @@ namespace OptimeGBASdl
             }
         }
 
-        public static void ToggleFullscreen()
+        public void ToggleFullscreen()
         {
             if (IsFullscreen)
             {
@@ -1050,14 +1078,19 @@ namespace OptimeGBASdl
             }
         }
 
-        public static void Log(string msg)
+        public void Log(string msg)
         {
             Console.WriteLine("[Optime GBA] " + msg);
         }
 
-        static IntPtr AudioTempBufPtr = Marshal.AllocHGlobal(16384);
-        static void AudioReady(short[] data)
+        IntPtr AudioTempBufPtr = Marshal.AllocHGlobal(16384);
+        void AudioReady(short[] data)
         {
+            if ((SDL_GetWindowFlags(Window) & (uint)SDL_WindowFlags.SDL_WINDOW_MOUSE_FOCUS) == 0)
+            {
+                return;
+            }
+
             // Don't queue audio if too much is in buffer
             if (Sync || GetAudioSamplesInQueue() < AUDIO_SAMPLE_FULL_THRESHOLD)
             {
@@ -1071,7 +1104,7 @@ namespace OptimeGBASdl
             }
         }
 
-        public static uint GetAudioSamplesInQueue()
+        public uint GetAudioSamplesInQueue()
         {
             return SDL_GetQueuedAudioSize(AudioDevice) / sizeof(short);
         }
