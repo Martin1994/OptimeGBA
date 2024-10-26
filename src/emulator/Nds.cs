@@ -1,7 +1,7 @@
 using System;
 using static OptimeGBA.MemoryUtil;
 using static OptimeGBA.Bits;
-using static Util;
+using static OptimeGBA.Util;
 
 namespace OptimeGBA
 {

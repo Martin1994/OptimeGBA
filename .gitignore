@@ -1,11 +1,13 @@
-/bin
-/obj
+bin
+obj
 /roms/*
 !/roms/.gitkeep
 imgui.ini
 *.txt
 tests/
 .vs
+/.vscode
 Properties
 *.bin
 samples
+*.csproj.user

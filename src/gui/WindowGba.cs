@@ -8,14 +8,11 @@ using System.IO;
 using ImGuiNET;
 using System.Threading;
 using ImGuiUtils;
-using static Util;
+using static OptimeGBA.Util;
 using System.Collections.Generic;
 using System.Runtime;
 using System.Numerics;
 using OptimeGBA;
-using Gee.External.Capstone.Arm;
-using System.Text;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using static SDL2.SDL;
 using System.Linq;
@@ -386,7 +383,7 @@ namespace OptimeGBAEmulator
                 ImGui.BeginChild("Memory");
                 for (int i = 0; i < rows; i++)
                 {
-                    ImGui.Text($"{Util.HexN(tempBase, 8)}:");
+                    ImGui.Text($"{HexN(tempBase, 8)}:");
                     for (int j = 0; j < cols; j++)
                     {
                         uint val = Gba.Mem.Read8(tempBase);
@@ -417,7 +414,7 @@ namespace OptimeGBAEmulator
             {
                 if (LogIndex < Log.Length)
                 {
-                    logText = Log[LogIndex].Substring(0, 135) + Log[LogIndex].Substring(144, 14) + $" {LogIndex + 1}";
+                    logText = Log[LogIndex] == "" ? "" : Log[LogIndex].Substring(0, 135) + Log[LogIndex].Substring(144, 14) + $" {LogIndex + 1}";
                 }
                 else
                 {

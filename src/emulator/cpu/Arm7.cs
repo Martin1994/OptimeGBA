@@ -2,7 +2,6 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using static OptimeGBA.Bits;
-using static Util;
 using static OptimeGBA.MemoryUtil;
 
 namespace OptimeGBA

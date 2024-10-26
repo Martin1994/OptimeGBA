@@ -1,5 +1,5 @@
 using static OptimeGBA.Bits;
-using static Util;
+using static OptimeGBA.Util;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 

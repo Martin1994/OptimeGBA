@@ -1,7 +1,7 @@
 using System;
 using static OptimeGBA.Bits;
 using static OptimeGBA.CoreUtil;
-using static Util;
+using static OptimeGBA.Util;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
 

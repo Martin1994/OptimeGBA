@@ -10,8 +10,6 @@
     <TieredCompilation>true</TieredCompilation>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <ApplicationIcon>icon.ico</ApplicationIcon>
-
     <IlcInvariantGlobalization>true</IlcInvariantGlobalization>
     <RootAllApplicationAssemblies>false</RootAllApplicationAssemblies>
     <IlcGenerateCompleteTypeMetadata>false</IlcGenerateCompleteTypeMetadata>
@@ -22,11 +20,6 @@
     <!-- <DefineConstants>UNSAFE</DefineConstants> -->
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="src/gui/**" />
-    <Compile Remove="src/MainOpenTK.cs" />
-    <Compile Remove="src/MainSDL.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="resources/3d-placeholder.raw" />
+    <EmbeddedResource Include="../../resources/3d-placeholder.raw" />
   </ItemGroup>
 </Project>

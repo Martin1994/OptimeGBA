@@ -8,7 +8,7 @@ using System.IO;
 using ImGuiNET;
 using System.Threading;
 using ImGuiUtils;
-using static Util;
+using static OptimeGBA.Util;
 using System.Collections.Generic;
 using System.Runtime;
 using System.Numerics;
@@ -237,7 +237,7 @@ namespace OptimeGBAEmulator
                     ushort val = cpu.Mem.ReadDebug16(tempBase & ~1U);
                     String disasm = disasmThumb(val);
 
-                    String s = $"{Util.HexN(tempBase, 8)}: {HexN(val, 4)} {disasm}";
+                    String s = $"{HexN(tempBase, 8)}: {HexN(val, 4)} {disasm}";
                     if (tempBase == cpu.R[15] - 4)
                     {
                         ImGui.TextColored(new System.Numerics.Vector4(0.0f, 1.0f, 0.0f, 1.0f), s);
@@ -253,7 +253,7 @@ namespace OptimeGBAEmulator
                     uint val = cpu.Mem.ReadDebug32(tempBase & ~3U);
                     String disasm = disasmArm(val);
 
-                    String s = $"{Util.HexN(tempBase, 8)}: {HexN(val, 8)} {disasm}";
+                    String s = $"{HexN(tempBase, 8)}: {HexN(val, 8)} {disasm}";
                     if (tempBase == cpu.R[15] - 8)
                     {
                         ImGui.TextColored(new System.Numerics.Vector4(0.0f, 1.0f, 0.0f, 1.0f), s);

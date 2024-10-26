@@ -8,7 +8,7 @@ using ImGuiNET;
 using static OptimeGBA.MemoryUtil;
 using System.Threading;
 using ImGuiUtils;
-using static Util;
+using static OptimeGBA.Util;
 using System.Collections.Generic;
 using OptimeGBA;
 using System.Runtime.Intrinsics.X86;
@@ -435,7 +435,7 @@ namespace OptimeGBAEmulator
                 ImGui.BeginChild("Memory");
                 for (int i = 0; i < rows; i++)
                 {
-                    ImGui.Text($"{Util.HexN(tempBase, 8)}:");
+                    ImGui.Text($"{HexN(tempBase, 8)}:");
                     for (int j = 0; j < cols; j++)
                     {
                         uint val = Nds.Mem9.Read8(tempBase);

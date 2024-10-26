@@ -5,20 +5,20 @@ namespace OptimeGBA
 
     public unsafe sealed class Gba
     {
-        public ProviderGba Provider;
+        public readonly ProviderGba Provider;
 
-        public Scheduler Scheduler;
+        public readonly Scheduler Scheduler;
 
-        public AudioCallback AudioCallback;
+        public readonly AudioCallback AudioCallback;
 
-        public MemoryGba Mem;
-        public Arm7 Cpu;
-        public GbaAudio GbaAudio;
-        public Keypad Keypad;
-        public PpuGba Ppu;
-        public HwControlGba HwControl;
-        public DmaGba Dma;
-        public Timers Timers;
+        public readonly MemoryGba Mem;
+        public readonly Arm7 Cpu;
+        public readonly GbaAudio GbaAudio;
+        public readonly Keypad Keypad;
+        public readonly PpuGba Ppu;
+        public readonly HwControlGba HwControl;
+        public readonly DmaGba Dma;
+        public readonly Timers Timers;
 
         public Gba(ProviderGba provider)
         {
@@ -34,6 +34,7 @@ namespace OptimeGBA
             Timers = new Timers(GbaAudio, HwControl, Scheduler, false, true);
             HwControl = new HwControlGba(this);
             Cpu = new Arm7(StateChange, Mem, false, false, null);
+            Serial = new SerialGba(this);
 
             Cpu.SetTimingsTable(
                 Cpu.Timing8And16,
@@ -45,11 +46,11 @@ namespace OptimeGBA
                 1, // PPU Palettes
                 1, // PPU VRAM
                 1, // PPU OAM
-                5, // Game Pak ROM/FlashROM 
-                5, // Game Pak ROM/FlashROM 
-                5, // Game Pak ROM/FlashROM 
-                5, // Game Pak ROM/FlashROM 
-                5, // Game Pak ROM/FlashROM 
+                5, // Game Pak ROM/FlashROM
+                5, // Game Pak ROM/FlashROM
+                5, // Game Pak ROM/FlashROM
+                5, // Game Pak ROM/FlashROM
+                5, // Game Pak ROM/FlashROM
                 5, // Game Pak ROM/FlashROM
                 5, // Game Pak SRAM/Flash
                 5  // Game Pak SRAM/Flash
@@ -64,11 +65,11 @@ namespace OptimeGBA
                 2, // PPU Palettes
                 2, // PPU VRAM
                 1, // PPU OAM
-                8, // Game Pak ROM/FlashROM 
-                8, // Game Pak ROM/FlashROM 
-                8, // Game Pak ROM/FlashROM 
-                8, // Game Pak ROM/FlashROM 
-                8, // Game Pak ROM/FlashROM 
+                8, // Game Pak ROM/FlashROM
+                8, // Game Pak ROM/FlashROM
+                8, // Game Pak ROM/FlashROM
+                8, // Game Pak ROM/FlashROM
+                8, // Game Pak ROM/FlashROM
                 8, // Game Pak ROM/FlashROM
                 8, // Game Pak SRAM/Flash
                 8 // Game Pak SRAM/Flash
@@ -85,11 +86,11 @@ namespace OptimeGBA
                 1, // PPU VRAM
                 1, // PPU OAM
                    // Compensate for no prefetch buffer 5 -> 2
-                2, // Game Pak ROM/FlashROM 
-                2, // Game Pak ROM/FlashROM 
-                2, // Game Pak ROM/FlashROM 
-                2, // Game Pak ROM/FlashROM 
-                2, // Game Pak ROM/FlashROM 
+                2, // Game Pak ROM/FlashROM
+                2, // Game Pak ROM/FlashROM
+                2, // Game Pak ROM/FlashROM
+                2, // Game Pak ROM/FlashROM
+                2, // Game Pak ROM/FlashROM
                 2, // Game Pak ROM/FlashROM
                 5, // Game Pak SRAM/Flash
                 5 // Game Pak SRAM/Flash
@@ -106,11 +107,11 @@ namespace OptimeGBA
                 2, // PPU VRAM
                 1, // PPU OAM
                 // Compensate for no prefetch buffer 8 -> 4
-                4, // Game Pak ROM/FlashROM 
-                4, // Game Pak ROM/FlashROM 
-                4, // Game Pak ROM/FlashROM 
-                4, // Game Pak ROM/FlashROM 
-                4, // Game Pak ROM/FlashROM 
+                4, // Game Pak ROM/FlashROM
+                4, // Game Pak ROM/FlashROM
+                4, // Game Pak ROM/FlashROM
+                4, // Game Pak ROM/FlashROM
+                4, // Game Pak ROM/FlashROM
                 4, // Game Pak ROM/FlashROM
                 8, // Game Pak SRAM/Flash
                 8  // Game Pak SRAM/Flash

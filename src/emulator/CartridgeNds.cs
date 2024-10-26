@@ -1,4 +1,4 @@
-using static Util;
+using static OptimeGBA.Util;
 using static OptimeGBA.Bits;
 using static OptimeGBA.MemoryUtil;
 using System;

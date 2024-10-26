@@ -1,5 +1,5 @@
 using System;
-using static Util;
+using static OptimeGBA.Util;
 
 namespace OptimeGBA
 {

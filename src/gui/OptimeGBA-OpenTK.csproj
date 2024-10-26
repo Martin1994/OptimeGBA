@@ -13,10 +13,10 @@
 
     <DefineConstants>OPENTK_DEBUGGER</DefineConstants>
 
-    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <ApplicationIcon>../../icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="icon.ico">
+    <Content Include="../../icon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <PackageReference Include="Gee.External.Capstone" Version="2.0.2" />
@@ -29,10 +29,9 @@
     <PackageReference Include="System.Net.Http" Version="4.3.4" />
     <PackageReference Include="ppy.SDL2-CS" Version="1.0.53" />
     <PackageReference Include="SDL2-CS.NetCore" Version="2.0.8" />
-
-    <Compile Remove="src/MainSDL.cs" />
   </ItemGroup>
+
   <ItemGroup>
-    <EmbeddedResource Include="resources/3d-placeholder.raw" />
+    <ProjectReference Include="../emulator/OptimeGBA-Core.csproj" />
   </ItemGroup>
 </Project>
