@@ -62,7 +62,10 @@ namespace OptimeGBASdl
 
             var windows = Enumerable.Range(0, 2).Select(i => new WindowSdl()).ToArray();
             var windowTasks = Task.WhenAll(windows.Select(w => Task.Run(() => w.Run(args))));
+            var linkTask = Task.Run(() => RunLink(windows, () => windowTasks.IsCompleted));
+
             windowTasks.Wait();
+            linkTask.Wait();
 
             SDL_AudioQuit();
             SDL_VideoQuit();
@@ -73,6 +76,30 @@ namespace OptimeGBASdl
             Environment.Exit(0);
         }
 
+        static void RunLink(WindowSdl[] windows, Func<bool> CanStop)
+        {
+            if (windows.Length < 2)
+            {
+                return;
+            }
+
+            GbaLink link = null;
+            while (!CanStop())
+            {
+                if (link == null)
+                {
+                    if (windows.All(w => w.Gba != null))
+                    {
+                        var gba = windows.Select(w => w.Gba).ToArray();
+                        Thread.Sleep(100);
+                        link = new GbaLink(gba[0], gba[1], gba.Length > 2 ? gba[2] : null, gba.Length > 3 ? gba[3] : null);
+                        WindowSdl.MainClock.Link = link;
+                        return;
+                    }
+                    Thread.Sleep(1000);
+                }
+            }
+        }
     }
 
     public unsafe class WindowSdl
@@ -133,6 +160,13 @@ namespace OptimeGBASdl
 
         uint[] DisplayBuf = new uint[NDS_WIDTH * NDS_HEIGHT];
         bool ColorCorrection = true;
+
+        public static MainClock MainClock = new();
+
+        static WindowSdl()
+        {
+            MainClock.Run();
+        }
 
         static uint InitAudioDevice()
         {
@@ -361,6 +395,7 @@ namespace OptimeGBASdl
                 var provider = new ProviderGba(gbaBios, rom, savPath, AudioReady);
                 provider.BootBios = true;
                 Gba = new Gba(provider);
+                MainClock.Register(Gba);
 
                 UpdateRomName(romPath);
 
@@ -555,44 +590,45 @@ namespace OptimeGBASdl
                         nextFrameAt = GetTime();
                     }
 
-                    double currentSec = GetTime();
+                    // double currentSec = GetTime();
 
-                    // Reset time if behind schedule
-                    if (currentSec - nextFrameAt >= SecondsPerFrameGba)
-                    {
-                        double diff = currentSec - nextFrameAt;
-                        Log("Can't keep up! Skipping " + (int)(diff * 1000) + " milliseconds");
-                        nextFrameAt = currentSec;
-                    }
+                    // // Reset time if behind schedule
+                    // if (currentSec - nextFrameAt >= SecondsPerFrameGba)
+                    // {
+                    //     double diff = currentSec - nextFrameAt;
+                    //     Log("Can't keep up! Skipping " + (int)(diff * 1000) + " milliseconds");
+                    //     nextFrameAt = currentSec;
+                    // }
 
-                    if (currentSec >= nextFrameAt)
-                    {
-                        nextFrameAt += SecondsPerFrameGba;
+                    // if (currentSec >= nextFrameAt)
+                    // {
+                    //     nextFrameAt += SecondsPerFrameGba;
 
-                        ThreadSync.Set();
-                    }
+                    //     ThreadSync.Set();
+                    // }
 
-                    if (currentSec >= fpsEvalTimer)
-                    {
-                        double diff = currentSec - fpsEvalTimer + 1;
-                        double frames = CyclesRan / CyclesPerFrameGba;
-                        CyclesRan = 0;
+                    // if (currentSec >= fpsEvalTimer)
+                    // {
+                    //     double diff = currentSec - fpsEvalTimer + 1;
+                    //     double frames = CyclesRan / CyclesPerFrameGba;
+                    //     CyclesRan = 0;
 
-                        double mips = (double)Gba.Cpu.InstructionsRan / 1000000D;
-                        Gba.Cpu.InstructionsRan = 0;
+                    //     double mips = (double)Gba.Cpu.InstructionsRan / 1000000D;
+                    //     Gba.Cpu.InstructionsRan = 0;
 
-                        // Use Math.Floor to truncate to 2 decimal places
-                        Fps = Math.Floor((frames / diff) * 100) / 100;
-                        Mips = Math.Floor((mips / diff) * 100) / 100;
-                        UpdateTitle();
-                        Seconds++;
-                        UpdatePlayingRpc();
+                    //     // Use Math.Floor to truncate to 2 decimal places
+                    //     Fps = Math.Floor((frames / diff) * 100) / 100;
+                    //     Mips = Math.Floor((mips / diff) * 100) / 100;
+                    //     UpdateTitle();
+                    //     Seconds++;
+                    //     UpdatePlayingRpc();
 
-                        fpsEvalTimer += 1;
-                    }
+                    //     fpsEvalTimer += 1;
+                    // }
 
                     if (Gba.Ppu.Renderer.RenderingDone)
                     {
+                        UpdateTitle();
                         Gba.Ppu.Renderer.RenderingDone = false;
                         CopyPixels(Gba.Ppu.Renderer.ScreenFront, DisplayBuf, GBA_WIDTH * GBA_HEIGHT, ColorCorrection);
                         fixed (void* ptr = DisplayBuf)
@@ -1003,7 +1039,7 @@ namespace OptimeGBASdl
                 bool re = Gba.GbaAudio.Resample;
                 SDL_SetWindowTitle(
                     Window,
-                    "Optime GBA - " + Fps + " fps - " + Mips + " MIPS - " + GetAudioSamplesInQueue() + " samples queued | " +
+                    $"Optime GBA [{Gba.Serial.SioMultiplayerFlags.PlayerId}] - {Fps} fps - {Mips} MIPS - {GetAudioSamplesInQueue()} samples queued | " +
                     (fA ? "A " : "- ") +
                     (fB ? "B " : "- ") +
                     (p1 ? "1 " : "- ") +

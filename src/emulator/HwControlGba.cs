@@ -99,7 +99,7 @@ namespace OptimeGBA
             IF |= (ushort)(1 << (int)i);
             CheckAndFireInterrupts();
         }
-        
+
         public void CheckAndFireInterrupts()
         {
             Available = (IE & IF & 0x3FFF) != 0;

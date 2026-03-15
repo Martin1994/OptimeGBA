@@ -20,6 +20,7 @@ namespace OptimeGBA
         Timer72 = 13,
         Timer73 = 14,
         GxFifo = 15,
+        LinkTransfer = 16,
     }
 
     public class SchedulerEvent
