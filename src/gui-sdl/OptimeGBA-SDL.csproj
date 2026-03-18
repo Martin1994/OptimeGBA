@@ -20,6 +20,8 @@
     <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
     <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
 
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+
     <DefineConstants>UNSAFE</DefineConstants>
   </PropertyGroup>
   <ItemGroup>

@@ -78,21 +78,17 @@ namespace OptimeGBA
             gba[0].Scheduler.AddEventRelative(SchedulerId.LinkTransfer, transferCyclesLeft, _ =>
             {
                 ReadyToTransfer = true;
-                //current.NeedTransferSync = true;
             });
             foreach (var current in gba)
             {
                 current.Serial.SioMultiplayerFlags.Start = true;
                 Array.Fill(current.Serial.SioMultiplayerData, (byte)0xFF);
-                current.Serial.SioMultiplayerData[0] = gba[0].Serial.SendData0;
-                current.Serial.SioMultiplayerData[1] = gba[0].Serial.SendData1;
             }
-            gba[0].Serial.SioMultiplayerFlags.Child = true;
         }
 
         public void MultiplayerTransfer()
         {
-            Console.WriteLine("Start transfer");
+            Console.WriteLine("[{0}] Start transfer", gba[0].Scheduler.CurrentTicks);
             ReadyToTransfer = false;
             gba[0].Serial.SioMultiplayerFlags.Child = false;
             foreach (var current in gba)

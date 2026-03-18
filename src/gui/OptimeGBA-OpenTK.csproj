@@ -14,6 +14,8 @@
     <DefineConstants>OPENTK_DEBUGGER</DefineConstants>
 
     <ApplicationIcon>../../icon.ico</ApplicationIcon>
+
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="../../icon.ico">

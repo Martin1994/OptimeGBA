@@ -223,7 +223,7 @@ namespace OptimeGBA
                 case 0x4: // I/O Registers
                     if (addr == 0x4000128)
                     {
-                        Console.WriteLine("Player {0}: Read SIOCNT: {1} {2} IRQ={3}", Gba.Serial.SioMultiplayerFlags.PlayerId, Gba.Serial.SioMultiplayerFlags, Gba.Serial.SioMode, Gba.Serial.Irq);
+                        Console.WriteLine("[{0}] Player {1}: Read SIOCNT: {2} {3} IRQ={4}", Gba.Scheduler.CurrentTicks, Gba.Serial.SioMultiplayerFlags.PlayerId, Gba.Serial.SioMultiplayerFlags, Gba.Serial.SioMode, Gba.Serial.Irq);
                     }
                     byte f0 = Read8Unregistered(debug, addr++);
                     byte f1 = Read8Unregistered(debug, addr++);
@@ -300,7 +300,7 @@ namespace OptimeGBA
                 case 0x4: // I/O Registers
                     if (addr == 0x4000128)
                     {
-                        Console.WriteLine("Player {1}: Write SIOCNT: {0}", (SioMultiplayerFlag)val, Gba.Serial.SioMultiplayerFlags.PlayerId);
+                        Console.WriteLine("[{0}] Player {1}: Write SIOCNT: {2}", Gba.Scheduler.CurrentTicks, Gba.Serial.SioMultiplayerFlags.PlayerId, (SioMultiplayerFlag)val);
                     }
                     WriteHwio8(debug, addr++, (byte)(val >> 0));
                     WriteHwio8(debug, addr++, (byte)(val >> 8));
@@ -390,12 +390,12 @@ namespace OptimeGBA
             else if (addr >= 0x4000134 && addr <= 0x400015A) // Serial Communications
             {
                 switch (addr) {
-                    case 0x400134:
-                        Console.WriteLine("Read RCNT low");
-                        return 0;
+                    case 0x4000134:
+                        Console.WriteLine("[{0}] Read RCNT low", Gba.Scheduler.CurrentTicks);
+                        return (byte)(Gba.Serial.Rcnt & 0xFF);
                     case 0x4000135:
-                        Console.WriteLine("Read RCNT high");
-                        return 0x80;
+                        Console.WriteLine("[{0}] Read RCNT high", Gba.Scheduler.CurrentTicks);
+                        return (byte)((Gba.Serial.Rcnt >> 8) & 0xFF);
                 }
             }
             else if (addr >= 0x4000200 && addr <= 0x4FF0800) // Interrupt, Waitstate, and Power-Down Control
@@ -442,11 +442,13 @@ namespace OptimeGBA
             {
                 if (addr == 0x4000134)
                 {
-                    Console.WriteLine("Write RCNT low: 0x{0:X}", val);
+                    Console.WriteLine("[{0}] Write RCNT low: 0x{1:X}", Gba.Scheduler.CurrentTicks, val);
+                    Gba.Serial.Rcnt = (ushort)((Gba.Serial.Rcnt & 0xFF00) | val);
                 }
-                if (addr == 0x4000135)
+                else if (addr == 0x4000135)
                 {
-                    Console.WriteLine("Write RCNT high: 0x{0:X}", val);
+                    Console.WriteLine("[{0}] Write RCNT high: 0x{1:X}", Gba.Scheduler.CurrentTicks, val);
+                    Gba.Serial.Rcnt = (ushort)((Gba.Serial.Rcnt & 0x00FF) | (val << 8));
                 }
             }
             else if (addr >= 0x4000200 && addr <= 0x4FF0800) // Interrupt, Waitstate, and Power-Down Control

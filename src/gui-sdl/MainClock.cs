@@ -46,23 +46,25 @@ namespace OptimeGBASdl
                     }
                 }
 
-                int div = 3000;
-                for (int i = 0 ; i < div; i++)
+                if (shouldMoveToNextFrame)
                 {
                     foreach (var execution in executionList)
                     {
-                        var cyclesLeft = execution.CyclesLeft;
-                        if (shouldMoveToNextFrame)
-                        {
-                            cyclesLeft += 280896 / div;
-                        }
-                        while (cyclesLeft > 0)
-                        {
-                            uint elapsedCycles = execution.Gba.StateStep();
-                            cyclesLeft -= elapsedCycles;
-                            // if (Link.ReadyToTransfer)
-                        }
-                        execution.CyclesLeft = cyclesLeft;
+                        execution.CyclesLeft += 280896;
+                    }
+                }
+
+                // Step all GBAs in lockstep, one instruction at a time.
+                // This keeps schedulers synchronized for link cable transfers.
+                if (executionList.Count == 0)
+                {
+                    continue;
+                }
+                while (executionList[0].CyclesLeft > 0)
+                {
+                    foreach (var execution in executionList)
+                    {
+                        execution.CyclesLeft -= execution.Gba.Step();
                     }
 
                     if (Link != null && Link.ReadyToTransfer)
