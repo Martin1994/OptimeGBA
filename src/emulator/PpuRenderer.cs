@@ -6,6 +6,7 @@ using static OptimeGBA.MemoryUtil;
 using System.IO;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using System.Runtime.Intrinsics.Arm;
 using System.Linq;
 
 namespace OptimeGBA
@@ -665,15 +666,27 @@ namespace OptimeGBA
 
                     if (data != 0)
                     {
-                        Vector256<uint> indices = Avx2.ConvertToVector256Int32((byte*)&data).AsUInt32();
-                        if (xFlip)
+                        Vector256<uint> indices;
+                        if (Avx2.IsSupported)
                         {
-                            // First, reverse within 128-bit lanes
-                            indices = Avx2.Shuffle(indices, 0b00_01_10_11);
-                            // Then, swap upper and lower halves
-                            indices = Avx2.Permute2x128(indices, indices, 1);
+                            indices = Avx2.ConvertToVector256Int32((byte*)&data).AsUInt32();
+                            if (xFlip)
+                            {
+                                // First, reverse within 128-bit lanes
+                                indices = Avx2.Shuffle(indices, 0b00_01_10_11);
+                                // Then, swap upper and lower halves
+                                indices = Avx2.Permute2x128(indices, indices, 1);
+                            }
+                            indices = Avx2.And(indices, Vector256.Create(0xFFU));
                         }
-                        indices = Avx2.And(indices, Vector256.Create(0xFFU));
+                        else
+                        {
+                            byte* d = (byte*)&data;
+                            if (xFlip)
+                                indices = Vector256.Create((uint)d[7], d[6], d[5], d[4], d[3], d[2], d[1], d[0]);
+                            else
+                                indices = Vector256.Create((uint)d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
+                        }
 
                         PlaceBgRow(lineIndex, palettes, 0, indices, metaVec, Vector256.Create(0xFFU), winMasks, hi, lo);
                     }
@@ -770,6 +783,46 @@ namespace OptimeGBA
                 Avx2.MaskStore((int*)(lo + lineIndex), winMask, Avx2.LoadVector256((int*)(hi + lineIndex)));
                 Avx2.MaskStore((int*)(hi + lineIndex), winMask, color);
             }
+            else if (AdvSimd.IsSupported)
+            {
+                ushort* paletteBase = (ushort*)palettes + paletteRow * 16;
+
+                // Process two halves of 4 elements each
+                for (int half = 0; half < 2; half++)
+                {
+                    uint hOffset = lineIndex + (uint)(half * 4);
+                    Vector128<uint> indicesH = half == 0 ? indices.GetLower() : indices.GetUpper();
+                    Vector128<int> metaH = half == 0 ? meta.GetLower() : meta.GetUpper();
+                    Vector128<uint> clearMaskH = half == 0 ? clearMask.GetLower() : clearMask.GetUpper();
+
+                    // Scalar gather for palette colors (no NEON gather instruction)
+                    Vector128<int> color = Vector128.Create(
+                        (int)(ushort)paletteBase[indicesH.GetElement(0)],
+                        (int)(ushort)paletteBase[indicesH.GetElement(1)],
+                        (int)(ushort)paletteBase[indicesH.GetElement(2)],
+                        (int)(ushort)paletteBase[indicesH.GetElement(3)]
+                    );
+                    color = AdvSimd.Or(color.AsByte(), AdvSimd.ShiftLeftLogical(metaH.AsUInt32(), 16).AsByte()).AsInt32();
+
+                    // Load 4 window mask bytes and widen to 32-bit
+                    Vector128<int> winMaskH = Vector128.Create(
+                        (int)winMasks[hOffset], (int)winMasks[hOffset + 1],
+                        (int)winMasks[hOffset + 2], (int)winMasks[hOffset + 3]
+                    );
+                    winMaskH = AdvSimd.And(winMaskH.AsByte(), metaH.AsByte()).AsInt32();
+                    Vector128<int> winZero = AdvSimd.CompareEqual(winMaskH, Vector128<int>.Zero);
+                    Vector128<int> clearH = AdvSimd.And(indicesH.AsByte(), clearMaskH.AsByte()).AsInt32();
+                    Vector128<int> clearZero = AdvSimd.CompareEqual(clearH, Vector128<int>.Zero);
+                    // mergedMask: all-ones where pixel should be placed
+                    Vector128<byte> merged = AdvSimd.Or(winZero.AsByte(), clearZero.AsByte());
+                    merged = AdvSimd.Not(merged);
+
+                    Vector128<byte> oldHi = AdvSimd.LoadVector128((byte*)(hi + hOffset));
+                    // Push back covered pixels from hi to lo
+                    AdvSimd.Store((byte*)(lo + hOffset), AdvSimd.BitwiseSelect(merged, oldHi, AdvSimd.LoadVector128((byte*)(lo + hOffset))));
+                    AdvSimd.Store((byte*)(hi + hOffset), AdvSimd.BitwiseSelect(merged, color.AsByte(), oldHi));
+                }
+            }
             else
             {
                 for (int i = 0; i < 8; i++)
@@ -780,17 +833,13 @@ namespace OptimeGBA
 
                     int color = *(int*)(palettes + (paletteRow * 16 + (int)indexI) * sizeof(ushort));
                     color &= 0xFFFF;
-                    // Weave metadata (priority, ID) into color data
                     color |= metaI << 16;
 
                     int winMask = *(byte*)(winMasks + lineIndex + i);
                     winMask &= metaI;
-                    // Get important color bits
                     uint clear = indexI & clearMaskI;
-                    // Merge with window mask
                     bool mergedMask = winMask != 0 && clear != 0;
 
-                    // Push back covered pixels from hi to lo
                     if (mergedMask)
                     {
                         lo[lineIndex + i] = hi[lineIndex + i];
