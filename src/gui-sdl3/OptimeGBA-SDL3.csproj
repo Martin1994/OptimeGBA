@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ppy.SDL3-CS" Version="2026.302.0" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta5.25306.1" />
     <ProjectReference Include="../emulator/OptimeGBA-Core.csproj" />
   </ItemGroup>
   <ItemGroup>

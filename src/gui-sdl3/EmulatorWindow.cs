@@ -32,6 +32,7 @@ namespace OptimeGBASdl3
         public Gba Gba;
         Nds Nds;
         bool ndsMode;
+        bool linkMode;
 
         string romName;
         bool sync = true;
@@ -63,10 +64,11 @@ namespace OptimeGBASdl3
         int ScreenWidth => ndsMode ? NdsWidth : GbaWidth;
         int ScreenHeight => ndsMode ? NdsHeight : GbaHeight;
 
-        public void Run(string[] args)
+        public SDL_WindowID WindowId { get; private set; }
+
+        public void Init(bool isLinkMode = false)
         {
-            emulationThread = new Thread(EmulationThreadHandler) { Name = "Emulation Core" };
-            emulationThread.Start();
+            linkMode = isLinkMode;
 
             window = SDL3.SDL_CreateWindow("Optime GBA"u8, GbaWidth * 4, GbaHeight * 4, SDL_WindowFlags.SDL_WINDOW_RESIZABLE);
             if (window == null)
@@ -74,6 +76,7 @@ namespace OptimeGBASdl3
                 Console.Error.WriteLine($"SDL_CreateWindow failed: {SDL3.SDL_GetError()}");
                 return;
             }
+            WindowId = SDL3.SDL_GetWindowID(window);
             SDL3.SDL_SetWindowPosition(window, (int)SDL3.SDL_WINDOWPOS_CENTERED, (int)SDL3.SDL_WINDOWPOS_CENTERED);
             SDL3.SDL_SetWindowMinimumSize(window, GbaWidth, GbaHeight);
 
@@ -82,18 +85,53 @@ namespace OptimeGBASdl3
 
             InitAudio();
 
-            string romPath;
-            if (args.Length > 0)
+            // In link mode, LinkClock drives stepping — no per-window emulation thread
+            if (!linkMode)
             {
-                romPath = args[0];
+                emulationThread = new Thread(EmulationThreadHandler) { Name = "Emulation Core" };
+                emulationThread.Start();
             }
-            else
+        }
+
+        public bool Loaded { get; private set; }
+        public bool Closed { get; private set; }
+
+        string currentRomPath;
+        double fpsEvalTimer;
+
+        public void Run(string romPath)
+        {
+            if (window == null) { Closed = true; return; }
+            currentRomPath = romPath;
+        }
+
+        public void Tick()
+        {
+            if (Closed) return;
+
+            if (!Loaded)
             {
-                romPath = RunFileDrop();
-                if (romPath == null) return;
+                if (currentRomPath == null)
+                {
+                    // File drop mode runs its own mini event loop
+                    currentRomPath = RunFileDrop();
+                    if (currentRomPath == null) { Close(); return; }
+                }
+                if (!LoadRom(currentRomPath)) { Close(); return; }
+                fpsEvalTimer = GetTime();
+                Loaded = true;
             }
 
-            RunEmulator(romPath);
+            TickEmulator();
+        }
+
+        void Close()
+        {
+            Closed = true;
+            if (renderer != null) SDL3.SDL_DestroyRenderer(renderer);
+            if (window != null) SDL3.SDL_DestroyWindow(window);
+            renderer = null;
+            window = null;
         }
 
         // --- Audio ---
@@ -207,69 +245,59 @@ namespace OptimeGBASdl3
             }
         }
 
-        // --- Emulation main loop ---
+        // --- Emulation per-tick (called from unified loop) ---
 
-        void RunEmulator(string romPath)
+        public void HandleEvent(SDL_Event* evt)
         {
-        reload:
-            if (!LoadRom(romPath)) return;
-
-            double fpsEvalTimer = GetTime();
-            bool quit = false;
-
-            while (!quit)
+            if (Closed) return;
+            var evtType = (SDL_EventType)evt->type;
+            switch (evtType)
             {
-                SDL_Event evt;
-                while (SDL3.SDL_PollEvent(&evt))
-                {
-                    var evtType = (SDL_EventType)evt.type;
-                    switch (evtType)
+                case SDL_EventType.SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                    Close();
+                    break;
+                case SDL_EventType.SDL_EVENT_KEY_DOWN:
+                case SDL_EventType.SDL_EVENT_KEY_UP:
+                    if (Loaded) HandleKeyEvent(evt->key);
+                    break;
+                case SDL_EventType.SDL_EVENT_DROP_FILE:
+                    var path = Marshal.PtrToStringUTF8((IntPtr)evt->drop.data);
+                    if (path != null)
                     {
-                        case SDL_EventType.SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-                            quit = true;
-                            break;
-                        case SDL_EventType.SDL_EVENT_QUIT:
-                            quit = true;
-                            break;
-                        case SDL_EventType.SDL_EVENT_KEY_DOWN:
-                        case SDL_EventType.SDL_EVENT_KEY_UP:
-                            HandleKeyEvent(evt.key);
-                            break;
-                        case SDL_EventType.SDL_EVENT_DROP_FILE:
-                            romPath = Marshal.PtrToStringUTF8((IntPtr)evt.drop.data);
-                            goto reload;
+                        currentRomPath = path;
+                        Loaded = false;
                     }
-                }
+                    break;
+            }
+        }
 
-                if (resetDue)
-                {
-                    resetDue = false;
-                    ResetEmulation();
-                }
-
-                if (ndsMode)
-                    StepNdsFrame(ref fpsEvalTimer);
-                else
-                    StepGbaFrame();
-
-                BlitScreen();
-
-                if (!ndsMode && Gba.Mem.SaveProvider.Dirty)
-                {
-                    Gba.Mem.SaveProvider.Dirty = false;
-                    try { File.WriteAllBytesAsync(Gba.Provider.SavPath, Gba.Mem.SaveProvider.GetSave()); }
-                    catch { Console.WriteLine("Failed to write .sav file!"); }
-                }
-
-                if (excepted)
-                {
-                    SDL3.SDL_ShowSimpleMessageBox(SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "Exception Caught"u8, exceptionMessage, window);
-                    quit = true;
-                }
+        void TickEmulator()
+        {
+            if (resetDue)
+            {
+                resetDue = false;
+                ResetEmulation();
             }
 
-            SDL3.SDL_DestroyRenderer(renderer);
-            SDL3.SDL_DestroyWindow(window);
+            if (ndsMode)
+                StepNdsFrame(ref fpsEvalTimer);
+            else
+                StepGbaFrame();
+
+            BlitScreen();
+
+            if (!ndsMode && Gba.Mem.SaveProvider.Dirty)
+            {
+                Gba.Mem.SaveProvider.Dirty = false;
+                try { File.WriteAllBytesAsync(Gba.Provider.SavPath, Gba.Mem.SaveProvider.GetSave()); }
+                catch { Console.WriteLine("Failed to write .sav file!"); }
+            }
+
+            if (excepted)
+            {
+                SDL3.SDL_ShowSimpleMessageBox(SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "Exception Caught"u8, exceptionMessage, window);
+                Close();
+            }
         }
 
         bool LoadRom(string romPath)
@@ -320,6 +348,9 @@ namespace OptimeGBASdl3
 
             var provider = new ProviderGba(bios, rom, savPath, AudioReady) { BootBios = true };
             Gba = new Gba(provider);
+
+            if (linkMode)
+                Program.MainClock.Register(Gba);
 
             romName = Program.GameNameDictionary.TryGetValue(Gba.Provider.RomId, out var name) ? name : Path.GetFileName(romPath);
             Gba.Mem.SaveProvider.LoadSave(sav);
@@ -394,14 +425,17 @@ namespace OptimeGBASdl3
         {
             double now = GetTime();
 
-            // Reset timing if we fell too far behind
-            if (now - gbaNextFrameAt >= SecondsPerFrameGba * 2)
-                gbaNextFrameAt = now;
-
-            if (now >= gbaNextFrameAt)
+            // In link mode, LinkClock drives stepping — just poll for rendered frames
+            if (!linkMode)
             {
-                gbaNextFrameAt += SecondsPerFrameGba;
-                threadSync.Set();
+                if (now - gbaNextFrameAt >= SecondsPerFrameGba * 2)
+                    gbaNextFrameAt = now;
+
+                if (now >= gbaNextFrameAt)
+                {
+                    gbaNextFrameAt += SecondsPerFrameGba;
+                    threadSync.Set();
+                }
             }
 
             if (Gba.Ppu.Renderer.RenderingDone)
