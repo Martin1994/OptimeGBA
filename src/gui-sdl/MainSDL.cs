@@ -161,7 +161,7 @@ namespace OptimeGBASdl
         uint[] DisplayBuf = new uint[NDS_WIDTH * NDS_HEIGHT];
         bool ColorCorrection = true;
 
-        public static MainClock MainClock = new();
+        public static LinkClock MainClock = new();
 
         static WindowSdl()
         {
