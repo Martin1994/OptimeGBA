@@ -74,7 +74,7 @@ namespace OptimeGBA
             switch (addr)
             {
                 case 0x4000128: // SIOCNT - low
-                    Console.WriteLine("[{0}] Player{1} read SIOCNT_L", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId);
+                    // Console.WriteLine("[{0}] Player{1} read SIOCNT_L", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId);
                     return (byte)(
                         (SioMultiplayerFlag)SioMultiplayerFlags.BaudRate |
                         (SioMultiplayerFlags.Child ? SioMultiplayerFlag.Child : SioMultiplayerFlag.None) |
@@ -84,7 +84,7 @@ namespace OptimeGBA
                         (SioMultiplayerFlags.Start ? SioMultiplayerFlag.Start : SioMultiplayerFlag.None)
                     );
                 case 0x4000129: // SIOCNT - high
-                    Console.WriteLine("[{0}] Player{1} read SIOCNT_H", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId);
+                    // Console.WriteLine("[{0}] Player{1} read SIOCNT_H", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId);
                     return (byte)((int)(
                         (SioMultiplayerFlag)(SiocntUnusedBits << 8) |
                         (SioMultiplayerFlag)((byte)SioMode << 12) |
@@ -99,7 +99,7 @@ namespace OptimeGBA
                 case 0x4000125: // SIOMULTI2 - high
                 case 0x4000126: // SIOMULTI3 - low
                 case 0x4000127: // SIOMULTI3 - high
-                    Console.WriteLine("[{0}] Player{1} reading data{2}: {3}", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId, addr - 0x4000120, SioMultiplayerData[addr - 0x4000120]);
+                    // Console.WriteLine("[{0}] Player{1} reading data{2}: {3}", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId, addr - 0x4000120, SioMultiplayerData[addr - 0x4000120]);
                     return SioMultiplayerData[addr - 0x4000120];
             }
             return 0;
@@ -117,7 +117,7 @@ namespace OptimeGBA
                 case 0x4000125: // SIOMULTI2 - high
                 case 0x4000126: // SIOMULTI3 - low
                 case 0x4000127: // SIOMULTI3 - high
-                    Console.WriteLine("[{0}] Player{1} setting data{2}: {3}", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId, addr - 0x4000120, val);
+                    // Console.WriteLine("[{0}] Player{1} setting data{2}: {3}", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId, addr - 0x4000120, val);
                     SioMultiplayerData[addr - 0x4000120] = val;
                     break;
 
@@ -154,11 +154,11 @@ namespace OptimeGBA
 
                 case 0x400012A:
                     SendData0 = val;
-                    Console.WriteLine("[{0}] Player{1} sending data0: {2}", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId, SendData0);
+                    // Console.WriteLine("[{0}] Player{1} sending data0: {2}", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId, SendData0);
                     break;
                 case 0x400012B:
                     SendData1 = val;
-                    Console.WriteLine("[{0}] Player{1} sending data1: {2}", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId, SendData1);
+                    // Console.WriteLine("[{0}] Player{1} sending data1: {2}", Gba.Scheduler.CurrentTicks, SioMultiplayerFlags.PlayerId, SendData1);
                     break;
             }
         }

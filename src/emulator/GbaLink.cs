@@ -82,7 +82,7 @@ namespace OptimeGBA
 
         public void MultiplayerTransfer()
         {
-            Console.WriteLine("[{0}] Start transfer", gba[0].Scheduler.CurrentTicks);
+            // Console.WriteLine("[{0}] Start transfer", gba[0].Scheduler.CurrentTicks);
             ReadyToTransfer = false;
             gba[0].Serial.SioMultiplayerFlags.Child = false;
             foreach (var current in gba)
