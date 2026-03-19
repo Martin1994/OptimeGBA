@@ -18,16 +18,6 @@ namespace OptimeGBA
 
         private Gba[] gba;
 
-        /// <summary>
-        /// <para>
-        /// Message delay in multiplayer mode in cycles.
-        /// </para>
-        ///
-        /// <para>
-        /// See:
-        /// <see cref="https://github.com/visualboyadvance-m/visualboyadvance-m/blob/9d20ce9b597164a2f90d84843b5764ec92e1676f/src/core/gba/gbaLink.cpp#L466-L471"/>
-        /// </para>
-        /// </summary>
         static private readonly int[][] multiplayerDelay = new[] {
             //      9600    38400   57600   115200
             new[] { 72527,  18132,  12088,  6044 },
@@ -42,6 +32,10 @@ namespace OptimeGBA
 
         public bool ReadyToTransfer = false;
 
+        /// <summary>
+        /// Number of GBAs that have reached the current sync point.
+        /// When all GBAs arrive, we can proceed.
+        /// </summary>
         public GbaLink(Gba gba1, Gba gba2, Gba gba3 = null, Gba gba4 = null)
         {
             List<Gba> gbaList = new();

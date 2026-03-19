@@ -54,17 +54,28 @@ namespace OptimeGBASdl
                     }
                 }
 
-                // Step all GBAs in lockstep, one instruction at a time.
-                // This keeps schedulers synchronized for link cable transfers.
                 if (executionList.Count == 0)
                 {
                     continue;
                 }
+                // Step GBAs in bounded chunks. TickLimit caps both instruction
+                // execution and HaltSkip, preventing any GBA from drifting ahead.
+                // Must be < min transfer delay (6044 cycles at 115200 baud, 2 players).
+                const int SyncCycles = 2048;
                 while (executionList[0].CyclesLeft > 0)
                 {
+                    long minTick = long.MaxValue;
                     foreach (var execution in executionList)
                     {
-                        execution.CyclesLeft -= execution.Gba.Step();
+                        long t = execution.Gba.Scheduler.CurrentTicks;
+                        if (t < minTick) minTick = t;
+                    }
+                    long target = minTick + SyncCycles;
+
+                    foreach (var execution in executionList)
+                    {
+                        execution.Gba.TickLimit = target;
+                        execution.CyclesLeft -= execution.Gba.StateStepUntil();
                     }
 
                     if (Link != null && Link.ReadyToTransfer)

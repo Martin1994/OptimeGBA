@@ -206,14 +206,53 @@ namespace OptimeGBA
             Scheduler.CurrentTicks += cycles;
         }
 
+        /// <summary>
+        /// Tick limit for sync. HaltSkip and StateStepUntil respect this.
+        /// Set to long.MaxValue to disable.
+        /// </summary>
+        public long TickLimit = long.MaxValue;
+
+        /// <summary>
+        /// Like StateStep, but stops at TickLimit to keep multiple GBAs in sync.
+        /// HaltSkip also respects TickLimit.
+        /// </summary>
+        public uint StateStepUntil()
+        {
+            Cpu.CheckInterrupts();
+
+            long beforeTicks = Scheduler.CurrentTicks;
+            if (!Cpu.ThumbState)
+            {
+                while (Scheduler.CurrentTicks < TickLimit && Scheduler.CurrentTicks < Scheduler.NextEventTicks)
+                    Scheduler.CurrentTicks += Cpu.ExecuteArm();
+            }
+            else
+            {
+                while (Scheduler.CurrentTicks < TickLimit && Scheduler.CurrentTicks < Scheduler.NextEventTicks)
+                    Scheduler.CurrentTicks += Cpu.ExecuteThumb();
+            }
+
+            while (Scheduler.CurrentTicks >= Scheduler.NextEventTicks)
+            {
+                long current = Scheduler.CurrentTicks;
+                long next = Scheduler.NextEventTicks;
+                Scheduler.PopFirstEvent().Callback(current - next);
+            }
+
+            return (uint)(Scheduler.CurrentTicks - beforeTicks);
+        }
+
         public void HaltSkip(long cyclesLate)
         {
             long before = Scheduler.CurrentTicks;
-            while (!HwControl.Available)
+            while (!HwControl.Available && Scheduler.CurrentTicks < TickLimit)
             {
                 long ticksPassed = Scheduler.NextEventTicks - Scheduler.CurrentTicks;
-                Scheduler.CurrentTicks = Scheduler.NextEventTicks;
-                Scheduler.PopFirstEvent().Callback(0);
+                Scheduler.CurrentTicks = Math.Min(Scheduler.NextEventTicks, TickLimit);
+                if (Scheduler.CurrentTicks >= Scheduler.NextEventTicks)
+                {
+                    Scheduler.PopFirstEvent().Callback(0);
+                }
             }
         }
     }
