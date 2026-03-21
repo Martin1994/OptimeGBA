@@ -17,7 +17,6 @@ using Gee.External.Capstone.Arm;
 using System.Text;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using static SDL2.SDL;
 using System.Linq;
 
 namespace OptimeGBAEmulator
@@ -27,8 +26,24 @@ namespace OptimeGBAEmulator
         public WindowGba WindowGba;
         public WindowNds WindowNds;
 
-        public static CapstoneArmDisassembler ArmDisassembler = CapstoneArmDisassembler.CreateArmDisassembler(ArmDisassembleMode.Arm);
-        public static CapstoneArmDisassembler ThumbDisassembler = CapstoneArmDisassembler.CreateArmDisassembler(ArmDisassembleMode.Thumb);
+        public static CapstoneArmDisassembler ArmDisassembler;
+        public static CapstoneArmDisassembler ThumbDisassembler;
+        public static bool CapstoneAvailable;
+
+        static Window()
+        {
+            try
+            {
+                ArmDisassembler = CapstoneArmDisassembler.CreateArmDisassembler(ArmDisassembleMode.Arm);
+                ThumbDisassembler = CapstoneArmDisassembler.CreateArmDisassembler(ArmDisassembleMode.Thumb);
+                CapstoneAvailable = true;
+            }
+            catch
+            {
+                CapstoneAvailable = false;
+                Console.WriteLine("Capstone disassembler not available on this platform. Disassembly will show raw hex.");
+            }
+        }
 
         ImGuiController _controller;
         int VertexBufferObject;
@@ -40,7 +55,7 @@ namespace OptimeGBAEmulator
 
         public bool RunEmulator;
 
-        public Window(int width, int height, string title) : base(GameWindowSettings.Default, new NativeWindowSettings() { Size = new Vector2i(width, height), Title = title })
+        public Window(int width, int height, string title) : base(GameWindowSettings.Default, new NativeWindowSettings() { Size = new Vector2i(width, height), Title = title, APIVersion = new Version(3, 3), API = ContextAPI.OpenGL, Profile = ContextProfile.Core })
         {
             WindowGba = new WindowGba(this);
             WindowNds = new WindowNds(this);
@@ -75,8 +90,8 @@ namespace OptimeGBAEmulator
                     ImGui.SameLine();
                     ImGui.Text(s);
                 }
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public void LoadRomFromPath(string path)
@@ -121,8 +136,9 @@ namespace OptimeGBAEmulator
         protected override void OnResize(ResizeEventArgs e)
         {
             base.OnResize(e);
-            _controller.WindowResized(ClientSize.X, ClientSize.Y);
-            GL.Viewport(0, 0, ClientSize.X, ClientSize.Y);
+            var fb = FramebufferSize;
+            _controller.WindowResized(ClientSize.X, ClientSize.Y, fb.X, fb.Y);
+            GL.Viewport(0, 0, fb.X, fb.Y);
         }
 
         protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -144,7 +160,10 @@ namespace OptimeGBAEmulator
             // Disable texture filtering
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMagFilter.Nearest);
+            var fb = FramebufferSize;
             _controller = new ImGuiController(ClientSize.X, ClientSize.Y);
+            _controller.WindowResized(ClientSize.X, ClientSize.Y, fb.X, fb.Y);
+            GL.Viewport(0, 0, fb.X, fb.Y);
 
             VSync = VSyncMode.Off;
             UpdateFrequency = 59.7275;
@@ -161,20 +180,14 @@ namespace OptimeGBAEmulator
         protected override void OnTextInput(TextInputEventArgs args)
         {
             ImGui.GetIO().AddInputCharacter((byte)args.Unicode);
-            ImGui.GetIO().KeysDown[(byte)args.Unicode] = true;
         }
 
         protected override void OnKeyDown(KeyboardKeyEventArgs args)
         {
-            // keycode can be negative sometimes, so filter out by casting to uint
-            if ((uint)args.Key < 512)
-                ImGui.GetIO().KeysDown[(int)args.Key] = true;
         }
 
         protected override void OnKeyUp(KeyboardKeyEventArgs args)
         {
-            if ((uint)args.Key < 512)
-                ImGui.GetIO().KeysDown[(int)args.Key] = false;
         }
 
         protected override void OnUpdateFrame(FrameEventArgs e)
@@ -269,6 +282,17 @@ namespace OptimeGBAEmulator
 
         public static String disasmThumb(ushort opcode)
         {
+            if (!CapstoneAvailable)
+            {
+                return $"0x{opcode:X4}";
+            }
+            return disasmThumbCapstone(opcode);
+        }
+
+        // Separated to avoid JIT loading Capstone types when not available
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static String disasmThumbCapstone(ushort opcode)
+        {
             ThumbDisassembler.EnableInstructionDetails = true;
 
             byte[] code = new byte[] {
@@ -287,6 +311,17 @@ namespace OptimeGBAEmulator
         }
 
         public static String disasmArm(uint opcode)
+        {
+            if (!CapstoneAvailable)
+            {
+                return $"0x{opcode:X8}";
+            }
+            return disasmArmCapstone(opcode);
+        }
+
+        // Separated to avoid JIT loading Capstone types when not available
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static String disasmArmCapstone(uint opcode)
         {
             ArmDisassembler.EnableInstructionDetails = true;
 

@@ -13,7 +13,7 @@ using System.Collections.Generic;
 using OptimeGBA;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.InteropServices;
-using static SDL2.SDL;
+using SDL;
 using static OptimeGBAEmulator.Window;
 using System.Linq;
 using System.Numerics;
@@ -40,13 +40,11 @@ namespace OptimeGBAEmulator
 
         static bool SyncToAudio = true;
 
-        const uint AUDIO_SAMPLE_THRESHOLD = 1024;
-        const uint AUDIO_SAMPLE_FULL_THRESHOLD = 1024;
-        const int SAMPLES_PER_CALLBACK = 32;
+        const int AUDIO_SAMPLE_THRESHOLD = 1024;
+        const int AUDIO_SAMPLE_FULL_THRESHOLD = 1024;
         const int CyclesPerFrameNds = 560190;
 
-        static SDL_AudioSpec want, have;
-        static uint AudioDevice;
+        static SDL_AudioStream* AudioStream;
 
         static bool LogHwioAccesses;
 
@@ -54,15 +52,20 @@ namespace OptimeGBAEmulator
         public int ThreadCyclesQueued;
         public void EmulationThreadHandler()
         {
-            SDL_Init(SDL_INIT_AUDIO);
-
-            want.channels = 2;
-            want.freq = 32768;
-            want.samples = SAMPLES_PER_CALLBACK;
-            want.format = AUDIO_S16LSB;
-            // want.callback = NeedMoreAudioCallback;
-            AudioDevice = SDL_OpenAudioDevice(null, 0, ref want, out have, (int)SDL_AUDIO_ALLOW_FORMAT_CHANGE);
-            SDL_PauseAudioDevice(AudioDevice, 0);
+            SDL3.SDL_SetMainReady();
+            SDL3.SDL_SetHint(SDL3.SDL_HINT_MAC_BACKGROUND_APP, "1"u8);
+            SDL3.SDL_InitSubSystem(SDL_InitFlags.SDL_INIT_AUDIO);
+            var spec = new SDL_AudioSpec
+            {
+                channels = 2,
+                freq = 32768,
+                format = SDL_AudioFormat.SDL_AUDIO_S16LE,
+            };
+            AudioStream = SDL3.SDL_OpenAudioDeviceStream(SDL3.SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, null, IntPtr.Zero);
+            if (AudioStream != null)
+            {
+                SDL3.SDL_ResumeAudioStreamDevice(AudioStream);
+            }
 
             while (true)
             {
@@ -180,9 +183,10 @@ namespace OptimeGBAEmulator
             }
         }
 
-        public static uint GetAudioSamplesInQueue()
+        public static int GetAudioSamplesInQueue()
         {
-            return SDL_GetQueuedAudioSize(AudioDevice) / sizeof(short);
+            if (AudioStream == null) return 0;
+            return SDL3.SDL_GetAudioStreamQueued(AudioStream) / sizeof(short);
         }
 
         public WindowNds(Window window)
@@ -205,19 +209,15 @@ namespace OptimeGBAEmulator
             SetupRegViewer();
         }
 
-        static IntPtr AudioTempBufPtr = Marshal.AllocHGlobal(16384);
         static void AudioReady(short[] data)
         {
-            // Don't queue audio if too much is in buffer
+            if (AudioStream == null) return;
             if (SyncToAudio || GetAudioSamplesInQueue() < AUDIO_SAMPLE_FULL_THRESHOLD)
             {
-                int bytes = sizeof(short) * data.Length;
-
-                Marshal.Copy(data, 0, AudioTempBufPtr, data.Length);
-
-                // Console.WriteLine("Outputting samples to SDL");
-
-                SDL_QueueAudio(AudioDevice, AudioTempBufPtr, (uint)bytes);
+                fixed (short* ptr = data)
+                {
+                    SDL3.SDL_PutAudioStreamData(AudioStream, (IntPtr)ptr, data.Length * sizeof(short));
+                }
             }
         }
 
@@ -348,8 +348,8 @@ namespace OptimeGBAEmulator
                 ImGui.Text("R13: " + Hex(Nds.Cpu7.GetModeReg(13, Arm7Mode.UND), 8));
                 ImGui.Text("R14: " + Hex(Nds.Cpu7.GetModeReg(14, Arm7Mode.UND), 8));
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         static String[] baseNames = {
@@ -384,7 +384,7 @@ namespace OptimeGBAEmulator
 
             if (ImGui.Begin("Memory Viewer ARM9"))
             {
-                if (ImGui.BeginCombo("", $"{baseNames[MemoryViewerCurrent]}: {Hex(baseAddrs[MemoryViewerCurrent], 8)}"))
+                if (ImGui.BeginCombo("##memviewer", $"{baseNames[MemoryViewerCurrent]}: {Hex(baseAddrs[MemoryViewerCurrent], 8)}"))
                 {
                     for (int n = 0; n < baseNames.Length; n++)
                     {
@@ -455,8 +455,8 @@ namespace OptimeGBAEmulator
                     }
                 }
                 ImGui.EndChild();
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public String BuildLogText()
@@ -529,8 +529,8 @@ namespace OptimeGBAEmulator
                 ImGui.Text(Nds.Cpu7.Debug);
                 ImGui.Separator();
                 ImGui.Text(Nds.Cpu9.Debug);
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         uint[] PaletteImageBuffer = new uint[16 * 16];
@@ -971,8 +971,8 @@ namespace OptimeGBAEmulator
                     }
                 }
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public void DisplayMatrix(ref Matrix m)
@@ -1007,8 +1007,8 @@ namespace OptimeGBAEmulator
                 drawDisassembly(Nds.Cpu7);
                 ImGui.Columns(1);
 
-                ImGui.End();
             }
+            ImGui.End();
         }
 
         public uint[] DisplayBuffer = new uint[256 * 192];
@@ -1064,7 +1064,7 @@ namespace OptimeGBAEmulator
                         float y = Window.MouseState.Y - screenPos.Y;
 
                         bool down = Window.MouseState.IsButtonDown(MouseButton.Left);
-                        ImGui.ImageButton((IntPtr)screenTexIds[i], size, uv0, uv1, 0);
+                        ImGui.ImageButton($"screen{i}", (IntPtr)screenTexIds[i], size, uv0, uv1);
 
                         // Normalize
                         uint touchX = (uint)((x / size.X) * 256f);
@@ -1099,8 +1099,8 @@ namespace OptimeGBAEmulator
 
                 ImGui.PopStyleVar();
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public List<Register> Registers7 = new List<Register>();
@@ -1456,8 +1456,8 @@ namespace OptimeGBAEmulator
                     }
                 }
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public Dictionary<ThumbExecutor, uint> CpuProfilerDictThumb = new Dictionary<ThumbExecutor, uint>();
@@ -1520,8 +1520,8 @@ namespace OptimeGBAEmulator
                     ImGui.NextColumn();
                 }
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public void DrawHwioLog()
@@ -1609,8 +1609,8 @@ namespace OptimeGBAEmulator
                     }
                 }
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public void DumpSav()
@@ -1670,8 +1670,8 @@ namespace OptimeGBAEmulator
 
                 ImGui.Columns(1);
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public static readonly string[] IeIfBitNames = {
@@ -1717,8 +1717,8 @@ namespace OptimeGBAEmulator
                 displayCheckbox("IME##arm7", Nds.HwControl7.IME);
                 drawInterruptColumn(Nds.HwControl7.IE, Nds.HwControl7.IF, true);
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public void drawInterruptColumn(uint IE, uint IF, bool text)
@@ -1726,8 +1726,8 @@ namespace OptimeGBAEmulator
             ImGui.Text("IE  IF");
             for (uint i = 0; i < IeIfBitNames.Length; i++)
             {
-                displayCheckbox("", BitTest(IE, (byte)i)); ImGui.SameLine();
-                displayCheckbox("", BitTest(IF, (byte)i));
+                displayCheckbox($"##ie{i}", BitTest(IE, (byte)i)); ImGui.SameLine();
+                displayCheckbox($"##if{i}", BitTest(IF, (byte)i));
                 if (text)
                 {
                     ImGui.SameLine();
@@ -1748,7 +1748,7 @@ namespace OptimeGBAEmulator
 
                     var drawList = ImGui.GetWindowDrawList();
 
-                    var size = new Vector2(ImGui.GetWindowContentRegionWidth(), 40);
+                    var size = new Vector2(ImGui.GetContentRegionAvail().X, 40);
 
                     Vector2 pos = ImGui.GetCursorScreenPos();
 
@@ -1868,8 +1868,8 @@ namespace OptimeGBAEmulator
 
                 ImGui.Text("SOUNDBIAS: " + Hex(Nds.Audio.SOUNDBIAS, 8));
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         uint ColorBright(uint col, float mul)
@@ -2138,7 +2138,7 @@ namespace OptimeGBAEmulator
                                 ImGui.PushID(y * cols + x);
                                 ImGui.SetCursorScreenPos(cursorPos);
                                 // now use invisible buttons that fill the gap for better UX
-                                if (ImGui.InvisibleButton("", new Vector2(size + gap, size + gap)))
+                                if (ImGui.InvisibleButton("##invtile", new Vector2(size + gap, size + gap)))
                                 {
                                     // Teleport to center of tile on click
                                     Nds.Mem9.Write32(xPtr, (uint)(x * 32 + 16));
@@ -2150,7 +2150,7 @@ namespace OptimeGBAEmulator
 
                                 ImGui.SetCursorScreenPos(cursorPos);
                                 // use this to draw the button
-                                ImGui.Button("", new Vector2(size, size));
+                                ImGui.Button("##tile", new Vector2(size, size));
                                 ImGui.PopID();
                                 ImGui.PopStyleColor();
                                 ImGui.PopStyleColor();
@@ -2158,7 +2158,7 @@ namespace OptimeGBAEmulator
 
                                 if (x == xPos / 32 && y == yPos / 32)
                                 {
-                                    drawList.AddRect(cursorPos, cursorPos + new Vector2(size, size), 0xFF800000, 0, ImDrawCornerFlags.None, 2);
+                                    drawList.AddRect(cursorPos, cursorPos + new Vector2(size, size), 0xFF800000, 0, ImDrawFlags.None, 2.0f);
                                 }
 
                                 cursorPos += new Vector2(gap + size, 0);
@@ -2172,8 +2172,8 @@ namespace OptimeGBAEmulator
                         ImGui.Text("Generation 4 Pokémon game detected, but no suitable base pointer found.");
                     }
 
-                    ImGui.End();
                 }
+                    ImGui.End();
             }
         }
     }

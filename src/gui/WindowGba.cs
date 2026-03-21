@@ -14,7 +14,7 @@ using System.Runtime;
 using System.Numerics;
 using OptimeGBA;
 using System.Runtime.InteropServices;
-using static SDL2.SDL;
+using SDL;
 using System.Linq;
 using static OptimeGBAEmulator.Window;
 
@@ -36,25 +36,28 @@ namespace OptimeGBAEmulator
 
         static bool SyncToAudio = true;
 
-        const uint AUDIO_SAMPLE_THRESHOLD = 1024;
-        const uint AUDIO_SAMPLE_FULL_THRESHOLD = 1024;
-        const int SAMPLES_PER_CALLBACK = 32;
+        const int AUDIO_SAMPLE_THRESHOLD = 1024;
+        const int AUDIO_SAMPLE_FULL_THRESHOLD = 1024;
 
-        static SDL_AudioSpec want, have;
-        static uint AudioDevice;
+        static SDL_AudioStream* AudioStream;
 
         public int ThreadCyclesQueued;
         public void EmulationThreadHandler()
         {
-            SDL_Init(SDL_INIT_AUDIO);
-
-            want.channels = 2;
-            want.freq = 32768;
-            want.samples = SAMPLES_PER_CALLBACK;
-            want.format = AUDIO_S16LSB;
-            // want.callback = NeedMoreAudioCallback;
-            AudioDevice = SDL_OpenAudioDevice(null, 0, ref want, out have, (int)SDL_AUDIO_ALLOW_FORMAT_CHANGE);
-            SDL_PauseAudioDevice(AudioDevice, 0);
+            SDL3.SDL_SetMainReady();
+            SDL3.SDL_SetHint(SDL3.SDL_HINT_MAC_BACKGROUND_APP, "1"u8);
+            SDL3.SDL_InitSubSystem(SDL_InitFlags.SDL_INIT_AUDIO);
+            var spec = new SDL_AudioSpec
+            {
+                channels = 2,
+                freq = 32768,
+                format = SDL_AudioFormat.SDL_AUDIO_S16LE,
+            };
+            AudioStream = SDL3.SDL_OpenAudioDeviceStream(SDL3.SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, null, IntPtr.Zero);
+            if (AudioStream != null)
+            {
+                SDL3.SDL_ResumeAudioStreamDevice(AudioStream);
+            }
 
             while (true)
             {
@@ -144,9 +147,10 @@ namespace OptimeGBAEmulator
             }
         }
 
-        public static uint GetAudioSamplesInQueue()
+        public static int GetAudioSamplesInQueue()
         {
-            return SDL_GetQueuedAudioSize(AudioDevice) / sizeof(short);
+            if (AudioStream == null) return 0;
+            return SDL3.SDL_GetAudioStreamQueued(AudioStream) / sizeof(short);
         }
 
         public WindowGba(Window window)
@@ -166,19 +170,15 @@ namespace OptimeGBAEmulator
             SetupRegViewer();
         }
 
-        static IntPtr AudioTempBufPtr = Marshal.AllocHGlobal(16384);
         static void AudioReady(short[] data)
         {
-            // Don't queue audio if too much is in buffer
+            if (AudioStream == null) return;
             if (SyncToAudio || GetAudioSamplesInQueue() < AUDIO_SAMPLE_FULL_THRESHOLD)
             {
-                int bytes = sizeof(short) * data.Length;
-
-                Marshal.Copy(data, 0, AudioTempBufPtr, data.Length);
-
-                // Console.WriteLine("Outputting samples to SDL");
-
-                SDL_QueueAudio(AudioDevice, AudioTempBufPtr, (uint)bytes);
+                fixed (short* ptr = data)
+                {
+                    SDL3.SDL_PutAudioStreamData(AudioStream, (IntPtr)ptr, data.Length * sizeof(short));
+                }
             }
         }
 
@@ -304,8 +304,8 @@ namespace OptimeGBAEmulator
                 ImGui.Text("R13: " + Hex(Gba.Cpu.GetModeReg(13, Arm7Mode.UND), 8));
                 ImGui.Text("R14: " + Hex(Gba.Cpu.GetModeReg(14, Arm7Mode.UND), 8));
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         static String[] baseNames = {
@@ -332,7 +332,7 @@ namespace OptimeGBAEmulator
 
             if (ImGui.Begin("Memory Viewer"))
             {
-                if (ImGui.BeginCombo("", $"{baseNames[MemoryViewerCurrent]}: {Hex(baseAddrs[MemoryViewerCurrent], 8)}"))
+                if (ImGui.BeginCombo("##memviewer", $"{baseNames[MemoryViewerCurrent]}: {Hex(baseAddrs[MemoryViewerCurrent], 8)}"))
                 {
                     for (int n = 0; n < baseNames.Length; n++)
                     {
@@ -403,8 +403,8 @@ namespace OptimeGBAEmulator
                     }
                 }
                 ImGui.EndChild();
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public String BuildLogText()
@@ -477,8 +477,8 @@ namespace OptimeGBAEmulator
 
                 ImGui.Separator();
                 ImGui.Text(Gba.Cpu.Debug);
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         uint[] PaletteImageBuffer = new uint[16 * 16];
@@ -883,6 +883,7 @@ namespace OptimeGBAEmulator
             {
                 drawDisassembly(Gba.Cpu);
             }
+            ImGui.End();
         }
 
         public uint[] DisplayBuffer = new uint[240 * 160];
@@ -920,8 +921,8 @@ namespace OptimeGBAEmulator
 
                 ImGui.Image((IntPtr)gbTexId, new System.Numerics.Vector2(height, width));
                 ImGui.SetWindowSize(new System.Numerics.Vector2(height + 16, width + 36));
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public List<Register> Registers = new List<Register>();
@@ -1157,7 +1158,7 @@ namespace OptimeGBAEmulator
         {
             if (ImGui.Begin("Register Viewer"))
             {
-                if (ImGui.BeginCombo("", $"{Hex(RegViewerSelected.Address, 8)} {RegViewerSelected.Name}"))
+                if (ImGui.BeginCombo("##regviewer", $"{Hex(RegViewerSelected.Address, 8)} {RegViewerSelected.Name}"))
                 {
                     foreach (Register r in Registers)
                     {
@@ -1190,8 +1191,8 @@ namespace OptimeGBAEmulator
                         ImGui.SameLine(); ImGui.Text(f.Name);
                     }
                 }
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public Dictionary<ThumbExecutor, uint> CpuProfilerDictThumb = new Dictionary<ThumbExecutor, uint>();
@@ -1254,8 +1255,8 @@ namespace OptimeGBAEmulator
                     ImGui.NextColumn();
                 }
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public void DrawHwioLog()
@@ -1272,8 +1273,8 @@ namespace OptimeGBAEmulator
                     ImGui.Text($"{Hex(entry.Key, 8)}: {entry.Value} writes");
                 }
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
         public void DumpSav()
@@ -1292,7 +1293,7 @@ namespace OptimeGBAEmulator
         {
             ImDrawListPtr dl = ImGui.GetWindowDrawList();
             System.Numerics.Vector2 pos = ImGui.GetCursorScreenPos();
-            float width = ImGui.GetWindowContentRegionWidth();
+            float width = ImGui.GetContentRegionAvail().X;
 
             ImGui.Dummy(new System.Numerics.Vector2(0, 128));
             dl.AddRectFilled(pos, new System.Numerics.Vector2(pos.X + width, pos.Y + 128), ImGui.GetColorU32(ImGuiCol.Button));
@@ -1344,7 +1345,7 @@ namespace OptimeGBAEmulator
         {
             ImDrawListPtr dl = ImGui.GetWindowDrawList();
             System.Numerics.Vector2 pos = ImGui.GetCursorScreenPos();
-            float width = ImGui.GetWindowContentRegionWidth();
+            float width = ImGui.GetContentRegionAvail().X;
 
             ImGui.Dummy(new System.Numerics.Vector2(0, 128));
             dl.AddRectFilled(pos, new System.Numerics.Vector2(pos.X + width, pos.Y + 128), ImGui.GetColorU32(ImGuiCol.Button));
@@ -1391,7 +1392,7 @@ namespace OptimeGBAEmulator
         {
             ImDrawListPtr dl = ImGui.GetWindowDrawList();
             System.Numerics.Vector2 pos = ImGui.GetCursorScreenPos();
-            float width = ImGui.GetWindowContentRegionWidth();
+            float width = ImGui.GetContentRegionAvail().X;
 
             ImGui.Dummy(new System.Numerics.Vector2(0, 128));
             dl.AddRectFilled(pos, new System.Numerics.Vector2(pos.X + width, pos.Y + 128), ImGui.GetColorU32(ImGuiCol.Button));
@@ -1609,8 +1610,8 @@ namespace OptimeGBAEmulator
 
                 ImGui.Columns(1);
 
-                ImGui.End();
             }
+                ImGui.End();
         }
 
     }

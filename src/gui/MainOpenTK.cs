@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Common.Input;
 
@@ -15,7 +16,10 @@ namespace OptimeGBAEmulator
         {
             using (Window game = new Window(1600, 900, "Optime GBA"))
             {
-                game.Icon = new WindowIcon();
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                {
+                    game.Icon = new WindowIcon();
+                }
                 if (args.Length > 0)
                 {
                     game.LoadRomFromPath(args[0]);
