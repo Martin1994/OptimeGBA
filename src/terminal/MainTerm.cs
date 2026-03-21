@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.CommandLine;
 using System.Threading;
 using System.Threading.Tasks;
 using OptimeGBA;
@@ -22,10 +23,25 @@ namespace OptimeGBAEmulator
             { "dark-block", new string[] { "█", "▓", "▒", "░", " "} }
         };
 
-        public static async Task Main(string[] args)
+        public static int Main(string[] args)
         {
-            Console.WriteLine("Loading ROM \"{0}\"", args[0]);
-            Gba = LoadGba(args[0]);
+            var romOption = new Option<string>("--rom") { Description = "Path to the ROM file to load", Required = true };
+
+            var rootCommand = new RootCommand("OptimeGBA Terminal Frontend");
+            rootCommand.Add(romOption);
+            rootCommand.SetAction(parseResult =>
+            {
+                string rom = parseResult.GetValue(romOption);
+                Run(rom).GetAwaiter().GetResult();
+            });
+
+            return rootCommand.Parse(args).Invoke();
+        }
+
+        static async Task Run(string romPath)
+        {
+            Console.WriteLine("Loading ROM \"{0}\"", romPath);
+            Gba = LoadGba(romPath);
 
             using PeriodicTimer mainClock = new PeriodicTimer(TimeSpan.FromSeconds(SECONDS_PER_FRAME_GBA));
             using TermControl term = new TermControl(COLOR_PALETTES["dark-block-wide"]);
