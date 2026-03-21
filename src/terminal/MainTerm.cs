@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.CommandLine;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,13 +14,14 @@ namespace OptimeGBAEmulator
         const int GBA_HEIGHT = 160;
 
         const int CyclesPerFrameGba = 280896;
-        const double SECONDS_PER_FRAME_GBA = 1D / (16777216D / 280896D);
+        const double GBA_FPS = 16777216D / 280896D;
+        const double DISPLAY_FPS = 20D;
+        const double DISPLAY_INTERVAL = 1D / DISPLAY_FPS;
+        const int GBA_FRAMES_PER_DISPLAY = (int)(GBA_FPS / DISPLAY_FPS + 0.5);
+        const int KEY_RELEASE_FRAMES = 3;
 
-        static readonly Dictionary<string, string[]> COLOR_PALETTES = new Dictionary<string, string[]>()
-        {
-            { "dark-block-wide", new string[] { "██", "█▓", "▓▓", "▓▒", "▒▒", "▒░", "░░", "░ ", "  "} },
-            { "dark-block", new string[] { "█", "▓", "▒", "░", " "} }
-        };
+        const int SCALE_X = 2;
+        const int SCALE_Y = 2;
 
         public static int Main(string[] args)
         {
@@ -43,25 +43,86 @@ namespace OptimeGBAEmulator
             Console.WriteLine("Loading ROM \"{0}\"", romPath);
             Gba = LoadGba(romPath);
 
-            using PeriodicTimer mainClock = new PeriodicTimer(TimeSpan.FromSeconds(SECONDS_PER_FRAME_GBA));
-            using TermControl term = new TermControl(COLOR_PALETTES["dark-block-wide"]);
+            using PeriodicTimer displayClock = new PeriodicTimer(TimeSpan.FromSeconds(DISPLAY_INTERVAL));
+            using TermControl term = new TermControl(SCALE_X, SCALE_Y);
+
+            int[] keyFrameCounters = new int[10]; // one per GBA button
 
             long cyclesLeft = 0;
             while (true)
             {
-                cyclesLeft += CyclesPerFrameGba;
+                cyclesLeft += CyclesPerFrameGba * GBA_FRAMES_PER_DISPLAY;
                 while (cyclesLeft > 0)
                 {
                     cyclesLeft -= Gba.StateStep();
                 }
 
+                PollInput(keyFrameCounters);
+                UpdateKeypad(keyFrameCounters);
+
                 if (Gba.Ppu.Renderer.RenderingDone)
                 {
+                    Gba.Ppu.Renderer.RenderingDone = false;
                     term.Display(GBA_WIDTH, GBA_HEIGHT, Gba.Ppu.Renderer.ScreenFront);
                 }
 
-                await mainClock.WaitForNextTickAsync();
+                await displayClock.WaitForNextTickAsync();
             }
+        }
+
+        static void PollInput(int[] keyFrameCounters)
+        {
+            while (Console.KeyAvailable)
+            {
+                var key = Console.ReadKey(true);
+                int index = MapKeyToButton(key);
+                if (index >= 0)
+                {
+                    keyFrameCounters[index] = KEY_RELEASE_FRAMES;
+                }
+            }
+        }
+
+        static int MapKeyToButton(ConsoleKeyInfo key)
+        {
+            return key.Key switch
+            {
+                ConsoleKey.Z => 0,         // B
+                ConsoleKey.X => 1,         // A
+                ConsoleKey.Backspace => 2,  // Select
+                ConsoleKey.Enter => 3,      // Start
+                ConsoleKey.LeftArrow => 4,  // Left
+                ConsoleKey.RightArrow => 5, // Right
+                ConsoleKey.UpArrow => 6,    // Up
+                ConsoleKey.DownArrow => 7,  // Down
+                ConsoleKey.Q => 8,          // L
+                ConsoleKey.E => 9,          // R
+                _ => -1,
+            };
+        }
+
+        static void UpdateKeypad(int[] keyFrameCounters)
+        {
+            Gba.Keypad.B = DecrementAndCheck(keyFrameCounters, 0);
+            Gba.Keypad.A = DecrementAndCheck(keyFrameCounters, 1);
+            Gba.Keypad.Select = DecrementAndCheck(keyFrameCounters, 2);
+            Gba.Keypad.Start = DecrementAndCheck(keyFrameCounters, 3);
+            Gba.Keypad.Left = DecrementAndCheck(keyFrameCounters, 4);
+            Gba.Keypad.Right = DecrementAndCheck(keyFrameCounters, 5);
+            Gba.Keypad.Up = DecrementAndCheck(keyFrameCounters, 6);
+            Gba.Keypad.Down = DecrementAndCheck(keyFrameCounters, 7);
+            Gba.Keypad.L = DecrementAndCheck(keyFrameCounters, 8);
+            Gba.Keypad.R = DecrementAndCheck(keyFrameCounters, 9);
+        }
+
+        static bool DecrementAndCheck(int[] counters, int index)
+        {
+            if (counters[index] > 0)
+            {
+                counters[index]--;
+                return true;
+            }
+            return false;
         }
 
         private static Gba LoadGba(string romPath)

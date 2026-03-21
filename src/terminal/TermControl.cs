@@ -1,73 +1,90 @@
 using System;
 using System.Diagnostics;
-using System.Linq;
+using System.Text;
+using OptimeGBA;
 
 namespace OptimeGBAEmulator
 {
     public sealed class TermControl : IDisposable
     {
         private bool disposedValue;
-        private readonly string[] colorPalette = new string[0b1000000000000000]; // 15 bit color
+        private readonly int scaleX;
+        private readonly int scaleY;
+        private readonly StringBuilder sb = new();
 
-        public TermControl(string[] grayscale)
+        public TermControl(int scaleX, int scaleY)
         {
-            Debug.Assert(grayscale.All(str => str.Length == grayscale[0].Length));
+            Debug.Assert(scaleX >= 1 && scaleY >= 1);
+            this.scaleX = scaleX;
+            this.scaleY = scaleY * 2; // half-block encodes 2 vertical pixels per cell
 
-            Console.WriteLine("\u001B[?47h"); // Enter alternate screen
-            Console.WriteLine("\u001B[?25l"); // Hide cursor
-
-            // Build color palette
-            for (uint i = 0; i < colorPalette.Length; i++) {
-                colorPalette[i] = Rgb555ToMonoChar(i, grayscale);
-            }
+            Console.Write("\u001B[?1049h"); // Enter alternate screen
+            Console.Write("\u001B[?25l"); // Hide cursor
+            Console.Out.Flush();
         }
 
         public void Display(int width, int height, Span<ushort> buffer)
         {
             Debug.Assert(buffer.Length == width * height);
 
-            Console.Out.Write("\u001B[0;0f"); // Reset cursor
+            int outWidth = width / scaleX;
+            int outHeight = height / scaleY;
 
-            int charWidth = colorPalette[0].Length;
+            sb.Clear();
+            sb.Append("\u001B[H"); // Reset cursor to top-left
 
-            Span<char> lineBuffer = stackalloc char[charWidth * width + Console.Out.NewLine.Length];
-            Console.Out.NewLine.AsSpan().CopyTo(lineBuffer[^Console.Out.NewLine.Length ..]);
-
-            for (int line = 0; line < height; line++)
+            for (int row = 0; row < outHeight; row++)
             {
-                for (int i = 0; i < width; i++)
+                int srcY0 = row * scaleY;
+                int srcY1 = srcY0 + scaleY / 2; // midpoint splits top/bottom half-block
+
+                for (int col = 0; col < outWidth; col++)
                 {
-                    colorPalette[buffer[width * line + i] & 0x7FFF].AsSpan().CopyTo(lineBuffer[(i * charWidth) ..]);
+                    int srcX = col * scaleX;
+
+                    AverageBlock(buffer, width, srcX, srcY0, scaleX, scaleY / 2, out int fgR, out int fgG, out int fgB);
+                    AverageBlock(buffer, width, srcX, srcY1, scaleX, scaleY / 2, out int bgR, out int bgG, out int bgB);
+
+                    sb.Append($"\u001B[38;2;{fgR};{fgG};{fgB};48;2;{bgR};{bgG};{bgB}m\u2580");
                 }
-                Console.Out.Write(lineBuffer);
+
+                sb.Append("\u001B[0m\n");
             }
+
+            Console.Write(sb);
             Console.Out.Flush();
         }
 
-        private static string Rgb555ToMonoChar(uint data, string[] grayscale)
+        private static void AverageBlock(Span<ushort> buffer, int stride, int x0, int y0, int w, int h, out int r, out int g, out int b)
         {
-            double r = (double)((data >> 0) & 0b11111) / 0b11111;
-            double g = (double)((data >> 5) & 0b11111) / 0b11111;
-            double b = (double)((data >> 10) & 0b11111) / 0b11111;
+            uint[] lut = PpuRenderer.ColorLutCorrected;
+            int sumR = 0, sumG = 0, sumB = 0;
+            int count = w * h;
 
-            // https://docs.microsoft.com/en-us/previous-versions/bb332387(v=msdn.10)?redirectedfrom=MSDN#grayscale-conversion
-            double luminance = Math.Clamp(0.299 * r + 0.587 * g + 0.114 * b, 0d, 0.99999d);
+            for (int dy = 0; dy < h; dy++)
+            {
+                int rowBase = (y0 + dy) * stride + x0;
+                for (int dx = 0; dx < w; dx++)
+                {
+                    uint rgb888 = lut[buffer[rowBase + dx] & 0x7FFF];
+                    sumR += (int)(rgb888 & 0xFF);
+                    sumG += (int)((rgb888 >> 8) & 0xFF);
+                    sumB += (int)((rgb888 >> 16) & 0xFF);
+                }
+            }
 
-            return grayscale[(uint)(luminance * grayscale.Length)];
+            r = sumR / count;
+            g = sumG / count;
+            b = sumB / count;
         }
 
         private void Dispose(bool disposing)
         {
             if (!disposedValue)
             {
-                if (disposing)
-                {
-                    // dispose managed state
-                }
-
-                // free unmanaged resources
-                Console.WriteLine("\u001B[?47l"); // Leave alternate screen
-
+                Console.Write("\u001B[?25h"); // Show cursor
+                Console.Write("\u001B[?1049l"); // Leave alternate screen
+                Console.Out.Flush();
                 disposedValue = true;
             }
         }
