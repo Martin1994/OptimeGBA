@@ -75,6 +75,18 @@ namespace OptimeGBAEmulator
                         term.Display(GBA_WIDTH, GBA_HEIGHT, Gba.Ppu.Renderer.ScreenFront);
                     }
 
+                    if (Gba.Mem.SaveProvider.Dirty)
+                    {
+                        Gba.Mem.SaveProvider.Dirty = false;
+                        try
+                        {
+                            System.IO.File.WriteAllBytes(Gba.Provider.SavPath, Gba.Mem.SaveProvider.GetSave());
+                        }
+                        catch
+                        {
+                        }
+                    }
+
                     await displayClock.WaitForNextTickAsync(cts.Token);
                 }
             }
@@ -200,7 +212,10 @@ namespace OptimeGBAEmulator
             var provider = new ProviderGba(gbaBios, rom, savPath, x => {});
             provider.BootBios = true;
 
-            return new Gba(provider);
+            var gba = new Gba(provider);
+            gba.Mem.SaveProvider.LoadSave(sav);
+
+            return gba;
         }
     }
 }
