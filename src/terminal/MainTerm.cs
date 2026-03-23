@@ -43,30 +43,43 @@ namespace OptimeGBAEmulator
             Console.WriteLine("Loading ROM \"{0}\"", romPath);
             Gba = LoadGba(romPath);
 
+            using CancellationTokenSource cts = new();
+            Console.CancelKeyPress += (_, e) =>
+            {
+                e.Cancel = true;
+                cts.Cancel();
+            };
+
             using PeriodicTimer displayClock = new PeriodicTimer(TimeSpan.FromSeconds(DISPLAY_INTERVAL));
             using TermControl term = new TermControl(SCALE_X, SCALE_Y);
 
             int[] keyFrameCounters = new int[10]; // one per GBA button
 
             long cyclesLeft = 0;
-            while (true)
+            try
             {
-                cyclesLeft += CyclesPerFrameGba * GBA_FRAMES_PER_DISPLAY;
-                while (cyclesLeft > 0)
+                while (true)
                 {
-                    cyclesLeft -= Gba.StateStep();
+                    cyclesLeft += CyclesPerFrameGba * GBA_FRAMES_PER_DISPLAY;
+                    while (cyclesLeft > 0)
+                    {
+                        cyclesLeft -= Gba.StateStep();
+                    }
+
+                    PollInput(keyFrameCounters);
+                    UpdateKeypad(keyFrameCounters);
+
+                    if (Gba.Ppu.Renderer.RenderingDone)
+                    {
+                        Gba.Ppu.Renderer.RenderingDone = false;
+                        term.Display(GBA_WIDTH, GBA_HEIGHT, Gba.Ppu.Renderer.ScreenFront);
+                    }
+
+                    await displayClock.WaitForNextTickAsync(cts.Token);
                 }
-
-                PollInput(keyFrameCounters);
-                UpdateKeypad(keyFrameCounters);
-
-                if (Gba.Ppu.Renderer.RenderingDone)
-                {
-                    Gba.Ppu.Renderer.RenderingDone = false;
-                    term.Display(GBA_WIDTH, GBA_HEIGHT, Gba.Ppu.Renderer.ScreenFront);
-                }
-
-                await displayClock.WaitForNextTickAsync();
+            }
+            catch (OperationCanceledException)
+            {
             }
         }
 
