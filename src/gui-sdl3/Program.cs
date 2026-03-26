@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.CommandLine;
 using System.Linq;
-using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using OptimeGBA;
@@ -19,33 +19,22 @@ namespace OptimeGBASdl3
         {
             var romOption = new Option<string>("--rom") { Description = "Path to the ROM file to load" };
             var linkOption = new Option<int?>("--link") { Description = "Enable link play with 2-4 windows (default: 2)", Arity = ArgumentArity.ZeroOrOne };
+            var linkStrategyOption = new Option<string>("--link-strategy") { Description = "Link sync strategy: barrier, single (default), spin", DefaultValueFactory = _ => "single" };
 
             var rootCommand = new RootCommand("OptimeGBA SDL3 Frontend");
             rootCommand.Add(romOption);
             rootCommand.Add(linkOption);
+            rootCommand.Add(linkStrategyOption);
 
             var parseResult = rootCommand.Parse(args);
-            if (parseResult.Errors.Count > 0)
+            if (parseResult.Errors.Count > 0 || parseResult.Action is System.CommandLine.Help.HelpAction)
             {
-                foreach (var error in parseResult.Errors)
-                    Console.Error.WriteLine(error.Message);
-                return 1;
-            }
-
-            if (args.Contains("--help") || args.Contains("-h") || args.Contains("-?"))
-            {
-                Console.WriteLine("OptimeGBA SDL3 Frontend");
-                Console.WriteLine();
-                Console.WriteLine("Usage: OptimeGBA-SDL3 [--rom <path>] [--link [<2-4>]]");
-                Console.WriteLine();
-                Console.WriteLine("Options:");
-                Console.WriteLine("  --rom <path>   Path to the ROM file to load");
-                Console.WriteLine("  --link [<num>] Enable link play with 2-4 windows (default: 2)");
-                return 0;
+                return parseResult.Invoke();
             }
 
             string rom = parseResult.GetValue(romOption);
             int? linkRaw = parseResult.GetValue(linkOption);
+            string linkStrategyStr = parseResult.GetValue(linkStrategyOption);
 
             int link;
             if (linkRaw.HasValue)
@@ -66,11 +55,18 @@ namespace OptimeGBASdl3
                 link = 1;
             }
 
-            Run(rom, link);
+            LinkSyncStrategy linkStrategy = linkStrategyStr switch
+            {
+                "single" => LinkSyncStrategy.SingleThread,
+                "spin" => LinkSyncStrategy.Spin,
+                _ => LinkSyncStrategy.Barrier,
+            };
+
+            Run(rom, link, linkStrategy);
             return 0;
         }
 
-        static void Run(string rom, int windowCount)
+        static void Run(string rom, int windowCount, LinkSyncStrategy linkStrategy)
         {
             LoadNoIntroDatabase();
 
@@ -91,7 +87,8 @@ namespace OptimeGBASdl3
 
             if (isLink)
             {
-                // LinkClock drives all GBA stepping in lockstep on a background thread
+                MainClock.Strategy = linkStrategy;
+                Console.WriteLine($"[Link] Sync strategy: {MainClock.Strategy}");
                 _ = MainClock.Run();
                 Task.Run(() => RunLink(windows));
             }
@@ -115,7 +112,9 @@ namespace OptimeGBASdl3
                 var serialAttr = romNode?.Attributes?["serial"];
                 var nameAttr = node.Attributes?["name"];
                 if (serialAttr != null && nameAttr != null)
+                {
                     GameNameDictionary[serialAttr.Value] = nameAttr.Value;
+                }
             }
         }
 
@@ -133,7 +132,6 @@ namespace OptimeGBASdl3
                         return;
                     }
 
-                    // Route window-specific events by windowID
                     var windowId = evt.window.windowID;
                     foreach (var w in windows)
                     {
@@ -146,7 +144,9 @@ namespace OptimeGBASdl3
                 }
 
                 foreach (var w in windows)
+                {
                     w.Tick();
+                }
             }
         }
 
@@ -157,7 +157,7 @@ namespace OptimeGBASdl3
                 if (windows.All(w => w.Gba != null))
                 {
                     var gbas = windows.Select(w => w.Gba).ToArray();
-                    System.Threading.Thread.Sleep(100);
+                    Thread.Sleep(100);
                     var link = new GbaLink(
                         gbas[0],
                         gbas[1],
@@ -167,7 +167,7 @@ namespace OptimeGBASdl3
                     MainClock.Link = link;
                     return;
                 }
-                System.Threading.Thread.Sleep(1000);
+                Thread.Sleep(1000);
             }
         }
     }
