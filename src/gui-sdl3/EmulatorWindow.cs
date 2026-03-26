@@ -350,7 +350,9 @@ namespace OptimeGBASdl3
             Gba = new Gba(provider);
 
             if (linkMode)
+            {
                 Program.MainClock.Register(Gba);
+            }
 
             romName = Program.GameNameDictionary.TryGetValue(Gba.Provider.RomId, out var name) ? name : Path.GetFileName(romPath);
             Gba.Mem.SaveProvider.LoadSave(sav);
@@ -702,6 +704,17 @@ namespace OptimeGBASdl3
         {
             try
             {
+                if (linkMode)
+                {
+                    // Wait for ROM and link to be established before running.
+                    // If we run frames before Link is set, the game tries to
+                    // handshake with Link==null and gives up.
+                    while (Gba == null || Gba.Serial.Link == null)
+                    {
+                        Thread.Sleep(50);
+                    }
+                }
+
                 while (true)
                 {
                     threadSync.WaitOne();
@@ -730,7 +743,9 @@ namespace OptimeGBASdl3
                 cyclesRan += CyclesPerFrameGba;
                 cyclesLeft += CyclesPerFrameGba;
                 while (cyclesLeft > 0)
+                {
                     cyclesLeft -= (int)Gba.StateStep();
+                }
             }
         }
 

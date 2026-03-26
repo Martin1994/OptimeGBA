@@ -12,26 +12,31 @@ namespace OptimeGBA
 
         public GbaLink Link;
 
-        readonly List<GbaExecution> executions = new();
+        readonly List<Gba> gbas = new();
+        long[] cyclesLeft = Array.Empty<long>();
 
         public void Register(Gba gba)
         {
-            executions.Add(new GbaExecution { Gba = gba });
+            gbas.Add(gba);
+            cyclesLeft = new long[gbas.Count];
         }
 
         public async Task Run(CancellationToken ct = default)
         {
+            while (gbas.Count < 2 || Link == null)
+            {
+                await Task.Delay(100, ct);
+            }
+
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1.0 / 60.0));
+            int n = gbas.Count;
 
             while (await timer.WaitForNextTickAsync(ct))
             {
-                if (executions.Count == 0)
-                    continue;
-
                 bool anyNeedsCycles = false;
-                foreach (var e in executions)
+                for (int i = 0; i < n; i++)
                 {
-                    if (e.CyclesLeft <= 0)
+                    if (cyclesLeft[i] <= 0)
                     {
                         anyNeedsCycles = true;
                         break;
@@ -40,36 +45,34 @@ namespace OptimeGBA
 
                 if (anyNeedsCycles)
                 {
-                    foreach (var e in executions)
-                        e.CyclesLeft += CyclesPerFrame;
+                    for (int i = 0; i < n; i++)
+                    {
+                        cyclesLeft[i] += CyclesPerFrame;
+                    }
                 }
 
-                while (executions[0].CyclesLeft > 0)
+                while (cyclesLeft[0] > 0)
                 {
                     long minTick = long.MaxValue;
-                    foreach (var e in executions)
+                    for (int i = 0; i < n; i++)
                     {
-                        long t = e.Gba.Scheduler.CurrentTicks;
+                        long t = gbas[i].Scheduler.CurrentTicks;
                         if (t < minTick) minTick = t;
                     }
                     long target = minTick + SyncChunkCycles;
 
-                    foreach (var e in executions)
+                    for (int i = 0; i < n; i++)
                     {
-                        e.Gba.TickLimit = target;
-                        e.CyclesLeft -= e.Gba.StateStepUntil();
+                        gbas[i].TickLimit = target;
+                        cyclesLeft[i] -= gbas[i].StateStepUntil();
                     }
 
-                    if (Link != null && Link.ReadyToTransfer)
+                    if (Link.ReadyToTransfer)
+                    {
                         Link.MultiplayerTransfer();
+                    }
                 }
             }
-        }
-
-        class GbaExecution
-        {
-            public Gba Gba;
-            public long CyclesLeft;
         }
     }
 }

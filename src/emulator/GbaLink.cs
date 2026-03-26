@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace OptimeGBA
 {
@@ -32,10 +30,6 @@ namespace OptimeGBA
 
         public bool ReadyToTransfer = false;
 
-        /// <summary>
-        /// Number of GBAs that have reached the current sync point.
-        /// When all GBAs arrive, we can proceed.
-        /// </summary>
         public GbaLink(Gba gba1, Gba gba2, Gba gba3 = null, Gba gba4 = null)
         {
             List<Gba> gbaList = new();
@@ -63,7 +57,8 @@ namespace OptimeGBA
 
         public void MultiplayerStart()
         {
-            if (!readyToSend) {
+            if (!readyToSend)
+            {
                 return;
             }
             readyToSend = false;
@@ -82,9 +77,9 @@ namespace OptimeGBA
 
         public void MultiplayerTransfer()
         {
-            // Console.WriteLine("[{0}] Start transfer", gba[0].Scheduler.CurrentTicks);
             ReadyToTransfer = false;
             gba[0].Serial.SioMultiplayerFlags.Child = false;
+
             foreach (var current in gba)
             {
                 current.Serial.SioMultiplayerFlags.Start = false;

@@ -9,6 +9,14 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OptimeGBA-OpenTK", "src\gui
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OptimeGBA-SDL3", "src\gui-sdl3\OptimeGBA-SDL3.csproj", "{6614E3F9-B73D-49FF-9688-5082FB52C901}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "link-test", "link-test", "{1574CF67-F6E0-2A94-E928-96F5914B6B17}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OptimeGBA-LinkTest", "src\link-test\OptimeGBA-LinkTest.csproj", "{9FC63143-CE68-415C-B205-EDB2ACE2324A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "emulator", "emulator", "{676F1ED1-64A5-6BB9-EE3C-79D495899BE4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,11 +63,26 @@ Global
 		{6614E3F9-B73D-49FF-9688-5082FB52C901}.Release|x64.Build.0 = Release|Any CPU
 		{6614E3F9-B73D-49FF-9688-5082FB52C901}.Release|x86.ActiveCfg = Release|Any CPU
 		{6614E3F9-B73D-49FF-9688-5082FB52C901}.Release|x86.Build.0 = Release|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Debug|x64.Build.0 = Debug|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Debug|x86.Build.0 = Debug|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Release|x64.ActiveCfg = Release|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Release|x64.Build.0 = Release|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Release|x86.ActiveCfg = Release|Any CPU
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{1574CF67-F6E0-2A94-E928-96F5914B6B17} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{9FC63143-CE68-415C-B205-EDB2ACE2324A} = {1574CF67-F6E0-2A94-E928-96F5914B6B17}
+		{676F1ED1-64A5-6BB9-EE3C-79D495899BE4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5753F1EB-BE95-4ACF-946D-2A3082A67889}

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.CommandLine;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using OptimeGBA;
@@ -91,7 +92,6 @@ namespace OptimeGBASdl3
 
             if (isLink)
             {
-                // LinkClock drives all GBA stepping in lockstep on a background thread
                 _ = MainClock.Run();
                 Task.Run(() => RunLink(windows));
             }
@@ -157,7 +157,7 @@ namespace OptimeGBASdl3
                 if (windows.All(w => w.Gba != null))
                 {
                     var gbas = windows.Select(w => w.Gba).ToArray();
-                    System.Threading.Thread.Sleep(100);
+                    Thread.Sleep(100);
                     var link = new GbaLink(
                         gbas[0],
                         gbas[1],
@@ -167,7 +167,7 @@ namespace OptimeGBASdl3
                     MainClock.Link = link;
                     return;
                 }
-                System.Threading.Thread.Sleep(1000);
+                Thread.Sleep(1000);
             }
         }
     }
