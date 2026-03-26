@@ -55,6 +55,8 @@ namespace OptimeGBASdl3
 
         uint[] displayBuf = new uint[NdsWidth * NdsHeight];
 
+        AutoResetEvent vsyncSignal;
+
         bool lCtrl;
         bool lAlt;
         bool holdingSpace;
@@ -350,7 +352,9 @@ namespace OptimeGBASdl3
             Gba = new Gba(provider);
 
             if (linkMode)
-                Program.MainClock.Register(Gba);
+            {
+                vsyncSignal = Program.MainClock.Register(Gba);
+            }
 
             romName = Program.GameNameDictionary.TryGetValue(Gba.Provider.RomId, out var name) ? name : Path.GetFileName(romPath);
             Gba.Mem.SaveProvider.LoadSave(sav);
@@ -527,6 +531,8 @@ namespace OptimeGBASdl3
             SDL3.SDL_RenderClear(renderer);
             SDL3.SDL_RenderTexture(renderer, texture, null, &dest);
             SDL3.SDL_RenderPresent(renderer);
+
+            vsyncSignal?.Set();
         }
 
         static SDL_FRect FitRect(int windowW, int windowH, int contentW, int contentH, bool integer, bool stretch)

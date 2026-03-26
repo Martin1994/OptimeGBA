@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace OptimeGBA
 {
@@ -10,27 +10,33 @@ namespace OptimeGBA
     // and the link transfer state is checked. The sync strategy controls how this
     // cross-instance synchronization is implemented.
     //
-    // Observed lag (frame timing jitter) in the real GUI frontend is ordered:
+    // When using a PeriodicTimer as the clock source, observed lag was ordered:
     //   SingleThread (smoothest) < Spin < Barrier (most laggy)
+    // After switching to vsync + wall-clock time budgeting, all three strategies
+    // perform comparably well. This is because:
     //
-    // This ordering reflects how much each strategy depends on the OS scheduler:
+    // 1. Vsync is a hardware-driven clock source (GPU/display driver interrupt),
+    //    far more precise than PeriodicTimer which depends on OS timer resolution.
     //
-    // - SingleThread: Zero OS scheduler involvement. The emulation thread never yields
-    //   or context-switches between sync points — it's a tight loop on a single core.
-    //   Produces the smoothest frame pacing, but cannot utilize multiple cores. If a
-    //   single core can't sustain 2x60fps, this will drop below 60fps.
+    // 2. Wall-clock time budgeting is self-correcting. With the old fixed
+    //    "1 frame per tick" approach, if a PeriodicTimer tick arrived late, the
+    //    frame still only got 1 frame of cycles — timing errors accumulated.
+    //    Now, elapsed wall time is measured each tick and converted to cycles,
+    //    so a late tick simply gets more cycles to compensate. Per-chunk Barrier
+    //    wake-up jitter (~5-10μs × 137 chunks ≈ ~1ms total) averages out over
+    //    the frame and doesn't visibly affect frame pacing.
     //
-    // - Spin: Workers spin on Volatile.Read and never sleep, so they respond to signals
-    //   within ~100ns (inter-core cache coherence latency). No OS scheduler involvement
-    //   for wake-up. However, spinning burns 100% CPU on each worker core, which can
-    //   cause thermal throttling or contend with GUI/audio threads for CPU time.
+    // Strategy differences:
     //
-    // - Barrier: Workers block in the kernel (pthread_cond_wait / futex). Wake-up goes
-    //   through the OS scheduler, adding ~5-10μs per wake. Under real GUI workloads
-    //   where SDL rendering, audio, and event threads also compete for CPU, the scheduler
-    //   may deprioritize or delay waking worker threads, causing frame timing jitter.
-    //   However, this is the most CPU-efficient multi-threaded option and can achieve
-    //   60fps on machines where a single core can't sustain 2x60fps.
+    // - SingleThread: Runs all GBA instances sequentially on one core. Zero
+    //   synchronization overhead. Cannot utilize multiple cores.
+    //
+    // - Spin: Workers spin on Volatile.Read (~100ns wake latency). No kernel
+    //   involvement, but burns 100% CPU on each worker core.
+    //
+    // - Barrier: Workers block in the kernel (~5-10μs wake per chunk). Most
+    //   CPU-efficient multi-threaded option. Can utilize multiple cores for
+    //   machines where a single core can't sustain 2×60fps.
     public enum LinkSyncStrategy
     {
         Barrier,
@@ -43,42 +49,82 @@ namespace OptimeGBA
         const int CyclesPerFrame = 280896;
         const int SyncChunkCycles = 2048;
 
+        // GBA CPU clock: 16777216 Hz. One GBA frame = 280896 cycles ≈ 59.7275 fps.
+        const long CyclesPerSecond = 16777216;
+
         public GbaLink Link;
         public LinkSyncStrategy Strategy = LinkSyncStrategy.Barrier;
 
         readonly List<Gba> gbas = new();
+        readonly List<AutoResetEvent> vsyncSignals = new();
         long[] cyclesLeft = Array.Empty<long>();
 
-        public void Register(Gba gba)
+        volatile bool running;
+
+        public AutoResetEvent Register(Gba gba)
         {
             gbas.Add(gba);
             cyclesLeft = new long[gbas.Count];
+            var signal = new AutoResetEvent(false);
+            vsyncSignals.Add(signal);
+            return signal;
         }
 
-        public async Task Run(CancellationToken ct = default)
+        public bool Ready => gbas.Count >= 2 && Link != null;
+
+        // Runs the emulation loop on the calling thread. Blocks until Stop() is called.
+        // Paced by vsync signals from windows via the per-GBA AutoResetEvents.
+        public void Run()
         {
-            while (gbas.Count < 2 || Link == null)
+            if (!Ready)
             {
-                await Task.Delay(100, ct);
+                return;
             }
+            running = true;
 
             switch (Strategy)
             {
                 case LinkSyncStrategy.Barrier:
-                    await RunBarrier(ct);
+                    RunBarrier();
                     break;
                 case LinkSyncStrategy.SingleThread:
-                    await RunSingleThread(ct);
+                    RunSingleThread();
                     break;
                 case LinkSyncStrategy.Spin:
-                    await RunSpin(ct);
+                    RunSpin();
                     break;
             }
         }
 
-        async Task RunBarrier(CancellationToken ct)
+        public void Stop()
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1.0 / 60.0));
+            running = false;
+            // Unblock any WaitOne() calls so Run() can exit
+            foreach (var s in vsyncSignals)
+            {
+                s.Set();
+            }
+        }
+
+        void WaitForVsync()
+        {
+            // For SingleThread, only the first window's vsync paces emulation.
+            // For multi-threaded, wait for all windows.
+            if (Strategy == LinkSyncStrategy.SingleThread)
+            {
+                vsyncSignals[0].WaitOne();
+            }
+            else
+            {
+                for (int i = 0; i < vsyncSignals.Count; i++)
+                {
+                    vsyncSignals[i].WaitOne();
+                }
+            }
+        }
+
+        void RunBarrier()
+        {
             int n = gbas.Count;
             long[] workerStepped = new long[n];
             bool workerStop = false;
@@ -109,8 +155,10 @@ namespace OptimeGBA
 
             try
             {
-                while (await timer.WaitForNextTickAsync(ct))
+                while (running)
                 {
+                    WaitForVsync();
+                    if (!running) break;
                     AddFrameCycles(n);
 
                     while (cyclesLeft[0] > 0)
@@ -146,13 +194,14 @@ namespace OptimeGBA
             }
         }
 
-        async Task RunSingleThread(CancellationToken ct)
+        void RunSingleThread()
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1.0 / 60.0));
             int n = gbas.Count;
 
-            while (await timer.WaitForNextTickAsync(ct))
+            while (running)
             {
+                WaitForVsync();
+                if (!running) break;
                 AddFrameCycles(n);
 
                 while (cyclesLeft[0] > 0)
@@ -170,9 +219,8 @@ namespace OptimeGBA
             }
         }
 
-        async Task RunSpin(CancellationToken ct)
+        void RunSpin()
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1.0 / 60.0));
             int n = gbas.Count;
 
             long go = 0;
@@ -209,8 +257,10 @@ namespace OptimeGBA
 
             try
             {
-                while (await timer.WaitForNextTickAsync(ct))
+                while (running)
                 {
+                    WaitForVsync();
+                    if (!running) break;
                     AddFrameCycles(n);
 
                     while (cyclesLeft[0] > 0)
@@ -244,23 +294,27 @@ namespace OptimeGBA
             }
         }
 
+        readonly Stopwatch wallClock = Stopwatch.StartNew();
+        long lastWallClockTicks;
+
+        // Adds cycles based on elapsed wall-clock time, so the emulation runs at
+        // the correct speed regardless of the monitor refresh rate (30/60/75/120Hz).
         void AddFrameCycles(int n)
         {
-            bool anyNeeds = false;
+            long now = wallClock.ElapsedTicks;
+            long delta = now - lastWallClockTicks;
+            lastWallClockTicks = now;
+
+            long cyclesToAdd = delta * CyclesPerSecond / Stopwatch.Frequency;
+
+            if (cyclesToAdd > CyclesPerFrame * 2)
+            {
+                cyclesToAdd = CyclesPerFrame * 2;
+            }
+
             for (int i = 0; i < n; i++)
             {
-                if (cyclesLeft[i] <= 0)
-                {
-                    anyNeeds = true;
-                    break;
-                }
-            }
-            if (anyNeeds)
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    cyclesLeft[i] += CyclesPerFrame;
-                }
+                cyclesLeft[i] += cyclesToAdd;
             }
         }
 

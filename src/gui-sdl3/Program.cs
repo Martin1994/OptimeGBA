@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.CommandLine;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using OptimeGBA;
 using SDL;
@@ -13,18 +12,20 @@ namespace OptimeGBASdl3
     public static class Program
     {
         public static readonly Dictionary<string, string> GameNameDictionary = new();
-        public static readonly LinkClock MainClock = new();
+        public static LinkClock MainClock;
 
         public static int Main(string[] args)
         {
             var romOption = new Option<string>("--rom") { Description = "Path to the ROM file to load" };
             var linkOption = new Option<int?>("--link") { Description = "Enable link play with 2-4 windows (default: 2)", Arity = ArgumentArity.ZeroOrOne };
-            var linkStrategyOption = new Option<string>("--link-strategy") { Description = "Link sync strategy: barrier, single (default), spin", DefaultValueFactory = _ => "single" };
+            var linkStrategyOption = new Option<string>("--link-strategy") { Description = "Link sync strategy: barrier (default), single, spin", DefaultValueFactory = _ => "barrier" };
 
-            var rootCommand = new RootCommand("OptimeGBA SDL3 Frontend");
-            rootCommand.Add(romOption);
-            rootCommand.Add(linkOption);
-            rootCommand.Add(linkStrategyOption);
+            var rootCommand = new RootCommand("OptimeGBA SDL3 Frontend")
+            {
+                romOption,
+                linkOption,
+                linkStrategyOption,
+            };
 
             var parseResult = rootCommand.Parse(args);
             if (parseResult.Errors.Count > 0 || parseResult.Action is System.CommandLine.Help.HelpAction)
@@ -87,13 +88,16 @@ namespace OptimeGBASdl3
 
             if (isLink)
             {
-                MainClock.Strategy = linkStrategy;
+                MainClock = new()
+                {
+                    Strategy = linkStrategy
+                };
                 Console.WriteLine($"[Link] Sync strategy: {MainClock.Strategy}");
-                _ = MainClock.Run();
-                Task.Run(() => RunLink(windows));
             }
 
-            RunEventLoop(windows);
+            RunEventLoop(windows, isLink);
+
+            MainClock?.Stop();
 
             SDL3.SDL_Quit();
             Environment.Exit(0);
@@ -118,8 +122,10 @@ namespace OptimeGBASdl3
             }
         }
 
-        static unsafe void RunEventLoop(EmulatorWindow[] windows)
+        static unsafe void RunEventLoop(EmulatorWindow[] windows, bool isLink)
         {
+            bool linkStarted = false;
+
             while (windows.Any(w => !w.Closed))
             {
                 SDL_Event evt;
@@ -143,6 +149,13 @@ namespace OptimeGBASdl3
                     }
                 }
 
+                // In link mode, try to establish the link once all GBAs are loaded.
+                // StepFrame() runs on a dedicated thread, paced by vsync signals from each window's RenderPresent().
+                if (isLink && !linkStarted)
+                {
+                    linkStarted = TryStartLink(windows);
+                }
+
                 foreach (var w in windows)
                 {
                     w.Tick();
@@ -150,25 +163,31 @@ namespace OptimeGBASdl3
             }
         }
 
-        static void RunLink(EmulatorWindow[] windows)
+        static bool TryStartLink(EmulatorWindow[] windows)
         {
-            while (true)
+            if (!windows.All(w => w.Gba != null))
             {
-                if (windows.All(w => w.Gba != null))
-                {
-                    var gbas = windows.Select(w => w.Gba).ToArray();
-                    Thread.Sleep(100);
-                    var link = new GbaLink(
-                        gbas[0],
-                        gbas[1],
-                        gbas.Length > 2 ? gbas[2] : null,
-                        gbas.Length > 3 ? gbas[3] : null
-                    );
-                    MainClock.Link = link;
-                    return;
-                }
-                Thread.Sleep(1000);
+                return false;
             }
+
+            var gbas = windows.Select(w => w.Gba).ToArray();
+            var link = new GbaLink(
+                gbas[0],
+                gbas[1],
+                gbas.Length > 2 ? gbas[2] : null,
+                gbas.Length > 3 ? gbas[3] : null
+            );
+            MainClock.Link = link;
+
+            // Run() blocks waiting for vsync signals from windows,
+            // so it must run on a dedicated thread separate from the event loop.
+            var linkThread = new Thread(MainClock.Run);
+            linkThread.Name = "LinkClock";
+            linkThread.IsBackground = true;
+            linkThread.Start();
+
+            Console.WriteLine("[Link] Link established.");
+            return true;
         }
     }
 }
